@@ -164,14 +164,16 @@
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
   .chip .pal{ font-style:normal; font-size:11px; opacity:.65; }
   .chip .pal:hover{ opacity:1; }
-  /* 编辑模式下长按拖动排序：禁止触摸滚动，避免拖拽与页面滚动冲突 */
-  .chips.editing .chip{ touch-action:none; }
+  /* 编辑模式下长按拖动排序：禁止触摸滚动/系统菜单，避免拖拽与滚动冲突 */
+  .chips.editing .chip{ touch-action:none; -webkit-touch-callout:none; }
   .drag-clone{
     position:fixed; z-index:95; pointer-events:none; margin:0;
     transform:translate(-50%,-50%) rotate(2deg) scale(1.06);
     box-shadow:0 10px 26px rgba(40,46,70,.32);
   }
   .drag-src{ opacity:.25; }
+  /* 拖拽中的落位占位标记 */
+  .drag-ph{ border-radius:999px; background:rgba(108,123,217,.08); box-shadow:inset 0 0 0 1.5px rgba(108,123,217,.4); }
   .edit-tip{ font-size:12px; color:var(--muted); margin-top:8px; }
 
   /* 取色器（无透明度） */
@@ -816,6 +818,8 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").h
 /* 不适合作为副行为的行为：纯占用型 & 通常作为主行为 */
 const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
 function renderChips(){
+  /* 兜底清理：若有拖拽残留的克隆/占位元素，重绘前先移除 */
+  if(!draggingChip) document.querySelectorAll(".drag-clone,.drag-ph").forEach(el=>el.remove());
   const mc=$("mainChips"); mc.innerHTML="";
   mc.classList.toggle("editing",editingBehaviors);
   const commons=store.behaviors.filter(b=>!b.temp);
@@ -882,64 +886,96 @@ $("editBehBtn").addEventListener("click",()=>{
   renderChips();
 });
 
-/* ---------- 编辑模式：长按拖动自由排序 ---------- */
+/* ---------- 编辑模式：长按拖动自由排序 ----------
+   要点：拖拽过程中绝不移动原标签（移动 DOM 节点会丢失 pointer capture，导致事件中断、卡住），
+   只移动一个占位标记 ph，松手时才把原标签插到该位置；事件监听挂在 document 上更可靠。 */
 const DRAG_DELAY=280, DRAG_SLOP=8;
+let draggingChip=null;
 function makeSortable(chip){
-  let timer=null, dragging=false, clone=null, sx=0, sy=0, suppressClick=false;
-  const cancel=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
-  const endDrag=(commit)=>{
-    cancel();
+  let timer=null, dragging=false, clone=null, ph=null, sx=0, sy=0, suppressClick=false;
+
+  const cancelTimer=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  function endDrag(commit){
+    cancelTimer();
+    document.removeEventListener("pointermove",onMove);
+    document.removeEventListener("pointerup",onUp);
+    document.removeEventListener("pointercancel",onCancel);
+    document.removeEventListener("contextmenu",onCtx);
+    window.removeEventListener("blur",onCancel);
     if(!dragging) return;
     dragging=false;
-    suppressClick=true;
+    draggingChip=null;
+    suppressClick=true;                 // 吞掉紧随的 click，避免误改选中状态
     if(clone){ clone.remove(); clone=null; }
+    if(ph){
+      const box=$("mainChips");
+      if(commit && ph.parentNode) box.insertBefore(chip, ph);
+      ph.remove(); ph=null;
+    }
     chip.classList.remove("drag-src");
     if(commit) saveChipOrder();
-  };
+  }
   /* 拖拽结束后吞掉紧随的 click，避免误改选中状态 */
   chip.addEventListener("click",e=>{
     if(suppressClick){ suppressClick=false; e.stopPropagation(); e.preventDefault(); }
   },true);
-  chip.addEventListener("pointerdown",e=>{
-    if(e.target.closest(".del")||e.target.closest(".pal")) return;
-    if(e.button!==undefined && e.button!==0) return;
-    sx=e.clientX; sy=e.clientY;
-    cancel();
-    timer=setTimeout(()=>{
-      timer=null;
-      dragging=true;
-      try{ chip.setPointerCapture(e.pointerId); }catch(_){}
-      if(navigator.vibrate) navigator.vibrate(20);
-      clone=chip.cloneNode(true);
-      clone.classList.add("drag-clone");
-      clone.classList.remove("selected");
-      clone.style.width=chip.offsetWidth+"px";
-      document.body.appendChild(clone);
-      chip.classList.add("drag-src");
-      move(e);
-    },DRAG_DELAY);
-  });
-  chip.addEventListener("pointermove",e=>{
+  const onUp=()=>endDrag(true);
+  const onCancel=()=>endDrag(false);
+  const onCtx=e=>{ if(dragging) e.preventDefault(); };
+  function onMove(e){
     if(!dragging){
-      if(timer && (Math.abs(e.clientX-sx)>DRAG_SLOP || Math.abs(e.clientY-sy)>DRAG_SLOP)) cancel();
+      if(timer && (Math.abs(e.clientX-sx)>DRAG_SLOP || Math.abs(e.clientY-sy)>DRAG_SLOP)) cancelTimer();
       return;
     }
     e.preventDefault();
     move(e);
+  }
+  chip.addEventListener("pointerdown",e=>{
+    if(e.target.closest(".del")||e.target.closest(".pal")) return;
+    if(e.button!==undefined && e.button!==0) return;
+    if(draggingChip) return;
+    sx=e.clientX; sy=e.clientY;
+    cancelTimer();
+    timer=setTimeout(()=>startDrag(e.clientX,e.clientY),DRAG_DELAY);
+    document.addEventListener("pointermove",onMove);
+    document.addEventListener("pointerup",onUp);
+    document.addEventListener("pointercancel",onCancel);
+    document.addEventListener("contextmenu",onCtx);
+    window.addEventListener("blur",onCancel);
   });
-  ["pointerup","pointercancel"].forEach(t=>chip.addEventListener(t,ev=>{ endDrag(ev.type==="pointerup"); }));
+  function startDrag(x,y){
+    timer=null;
+    dragging=true;
+    draggingChip=chip;
+    document.querySelectorAll(".drag-clone").forEach(el=>el.remove());  // 清理可能残留的克隆
+    const r=chip.getBoundingClientRect();
+    if(navigator.vibrate) navigator.vibrate(20);
+    clone=chip.cloneNode(true);
+    clone.classList.add("drag-clone");
+    clone.classList.remove("selected");
+    clone.querySelectorAll(".pal,.del").forEach(el=>el.remove());  // 悬浮标签上不显示操作按钮
+    clone.style.width=r.width+"px";
+    document.body.appendChild(clone);
+    ph=document.createElement("span");
+    ph.className="drag-ph";
+    ph.style.width=r.width+"px";
+    ph.style.height=r.height+"px";
+    $("mainChips").insertBefore(ph,chip);
+    chip.classList.add("drag-src");
+    move({clientX:x,clientY:y,preventDefault(){}});
+  }
   function move(e){
+    if(!clone) return;
     clone.style.left=e.clientX+"px";
     clone.style.top=e.clientY+"px";
-    /* 指针落到哪个标签上，就把原标签插到它前面/后面 */
     const box=$("mainChips");
     const sibs=[...box.querySelectorAll(".chip[data-bid]")].filter(el=>el!==chip);
     for(const s of sibs){
       const r=s.getBoundingClientRect();
       if(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom){
         const before = e.clientY < r.top + r.height/2;
-        box.insertBefore(chip, before ? s : s.nextSibling);
-        break;
+        box.insertBefore(ph, before ? s : s.nextSibling);
+        return;
       }
     }
   }
