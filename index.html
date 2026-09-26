@@ -267,7 +267,7 @@
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
       </div>
 
-      <div class="block-title" style="display:flex;align-items:center;gap:8px">副行为（可选 · 与主行为同时进行，各计一半）
+      <div class="block-title" style="display:flex;align-items:center;gap:8px">副行为
         <button class="edit-btn" id="subToggle">展开</button>
       </div>
       <div class="chips" id="subChips" hidden></div>
@@ -525,8 +525,11 @@ $("subToggle").addEventListener("click",()=>{
   updateSubToggle();
 });
 function updateSubToggle(){
-  $("subToggle").textContent = subExpanded ? "收起"
-    : (selSub ? "展开 · 已选"+nameOf(selSub) : "展开");
+  if(subExpanded){
+    $("subToggle").textContent="收起";
+  }else{
+    $("subToggle").textContent = selSub ? "展开 · 已选"+nameOf(selSub) : "展开";
+  }
 }
 
 function deleteBehavior(id){
