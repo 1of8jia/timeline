@@ -265,8 +265,10 @@
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
       </div>
 
-      <div class="block-title">副行为（可选 · 与主行为同时进行，统计时各计一半）</div>
-      <div class="chips" id="subChips"></div>
+      <div class="block-title" style="display:flex;align-items:center;gap:8px">副行为（可选 · 与主行为同时进行，各计一半）
+        <button class="edit-btn" id="subToggle">展开</button>
+      </div>
+      <div class="chips" id="subChips" hidden></div>
 
       <div class="row actions">
         <button class="primary" id="markBtn">标记时间段</button>
@@ -495,6 +497,8 @@ function chipEl(b,selected,onClick,deletable){
   return c;
 }
 
+/* 不适合作为副行为的行为：纯占用型 & 通常作为主行为 */
+const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
 function renderChips(){
   const mc=$("mainChips"); mc.innerHTML="";
   store.behaviors.forEach(b=>{
@@ -506,9 +510,21 @@ function renderChips(){
   const sc=$("subChips"); sc.innerHTML="";
   const none={id:null,name:"无",color:"#C6CBDB"};
   sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
-  store.behaviors.forEach(b=>{
+  store.behaviors.filter(b=>!SUB_EXCLUDED.includes(b.name)).forEach(b=>{
     sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
   });
+  updateSubToggle();
+}
+/* 副行为折叠/展开 */
+let subExpanded=false;
+$("subToggle").addEventListener("click",()=>{
+  subExpanded=!subExpanded;
+  $("subChips").hidden=!subExpanded;
+  updateSubToggle();
+});
+function updateSubToggle(){
+  $("subToggle").textContent = subExpanded ? "收起"
+    : (selSub ? "展开 · 已选"+nameOf(selSub) : "展开");
 }
 
 function deleteBehavior(id){
