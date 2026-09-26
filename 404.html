@@ -710,7 +710,7 @@ function chipEl(b,selected,onClick,deletable){
   if(deletable){
     /* 改色入口：编辑模式下双击行为即可调出取色器 */
     if(!isInlineId(b.id)){
-      c.addEventListener("dblclick",()=>openPicker(b.id,b.name,colorOf(b.id)));
+      c.addEventListener("dblclick",()=>openColorPicker(b.id,b.name,colorOf(b.id)));
       c.title="双击可修改颜色";
     }
     const d=document.createElement("i"); d.className="del"; d.textContent="×"; d.title="删除该常用行为";
@@ -765,7 +765,7 @@ function renderPicker(){
   $("pickPrev").style.background=hex;
   if(document.activeElement!==$("pickHex")) $("pickHex").value=hex;
 }
-function openPicker(id,name,colorHex){
+function openColorPicker(id,name,colorHex){
   const rgb=hexToRgb(colorHex)||{r:108,g:123,b:217};
   const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b);
   pickTargetId=id; pickH=hsv.h; pickS=hsv.s; pickV=hsv.v;
@@ -773,7 +773,7 @@ function openPicker(id,name,colorHex){
   $("pickMask").hidden=false;
   renderPicker();
 }
-function closePicker(){ $("pickMask").hidden=true; pickTargetId=null; }
+function closeColorPicker(){ $("pickMask").hidden=true; pickTargetId=null; }
 
 let svDragging=false, hueDragging=false;
 function svFromEvent(ev){
@@ -806,12 +806,12 @@ $("pickHex").addEventListener("input",()=>{
 $("pickOk").addEventListener("click",()=>{
   const b=behaviorOf(pickTargetId);
   if(b){ b.color=pickerHex(); saveStore(); }
-  closePicker();
+  closeColorPicker();
 });
-$("pickCancel").addEventListener("click",closePicker);
-$("pickClose").addEventListener("click",closePicker);
-$("pickMask").addEventListener("click",e=>{ if(e.target===$("pickMask")) closePicker(); });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").hidden) closePicker(); });
+$("pickCancel").addEventListener("click",closeColorPicker);
+$("pickClose").addEventListener("click",closeColorPicker);
+$("pickMask").addEventListener("click",e=>{ if(e.target===$("pickMask")) closeColorPicker(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").hidden) closeColorPicker(); });
 
 /* 不适合作为副行为的行为：纯占用型 & 通常作为主行为 */
 const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
