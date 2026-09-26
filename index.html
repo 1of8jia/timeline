@@ -301,14 +301,16 @@
   .sleep-row label{ display:flex; align-items:center; gap:6px; font-size:14px; color:var(--text); cursor:pointer; }
   .sleep-row input{ width:16px; height:16px; accent-color:var(--accent); }
   .chart-wrap{ display:flex; justify-content:center; padding:8px 0 4px; }
+  /* 三块：图例左对齐 · 占比条左对齐 · 数据右对齐（列宽固定，保证逐行对齐） */
   .stat-row{
     display:flex; align-items:center; gap:10px; padding:9px 4px;
     border-bottom:1px dashed var(--border); font-size:14px;
   }
   .stat-row:last-child{ border-bottom:none; }
-  .stat-name{ flex:1; display:flex; align-items:center; gap:8px; }
-  .stat-val{ color:var(--muted); font-size:13px; white-space:nowrap; }
-  .stat-bar{ height:6px; border-radius:3px; background:#EFF1F6; flex:none; width:110px; overflow:hidden; }
+  .stat-name{ flex:0 0 auto; width:94px; display:flex; align-items:center; gap:8px; min-width:0; }
+  .stat-label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stat-val{ flex:0 0 auto; width:120px; color:var(--muted); font-size:13px; white-space:nowrap; text-align:right; }
+  .stat-bar{ flex:1; min-width:36px; height:6px; border-radius:3px; background:#EFF1F6; overflow:hidden; }
   .stat-bar i{ display:block; height:100%; border-radius:3px; }
 
   @media (max-width:700px){
@@ -320,7 +322,9 @@
     .tab{ padding:10px 0; }
     main{ padding:12px 12px 86px; }
     .nav-label{ min-width:150px; font-size:14px; }
-    .stat-bar{ width:70px; }
+    .stat-row{ gap:8px; }
+    .stat-name{ width:80px; }
+    .stat-val{ width:104px; font-size:12px; }
     /* 手机端周视图：压缩列宽，7列同屏显示 */
     .week-grid .hour-col{ width:22px; }
     .week-grid .hour-mark{ font-size:8px; padding-right:2px; }
@@ -1417,7 +1421,8 @@ function renderStats(){
     const row=document.createElement("div"); row.className="stat-row";
     const nm=document.createElement("span"); nm.className="stat-name";
     const d=document.createElement("i"); d.className="dot"; d.style.background=it.color;
-    nm.appendChild(d); nm.appendChild(document.createTextNode(it.name));
+    const tx=document.createElement("span"); tx.className="stat-label"; tx.textContent=it.name; tx.title=it.name;
+    nm.appendChild(d); nm.appendChild(tx);
     const bar=document.createElement("span"); bar.className="stat-bar";
     const bi=document.createElement("i"); bi.style.width=(max?it.value/max*100:0)+"%"; bi.style.background=it.color;
     bar.appendChild(bi);
