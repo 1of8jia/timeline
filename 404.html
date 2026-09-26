@@ -158,6 +158,10 @@
   }
   .chip.selected .del{ color:var(--c); background:rgba(255,255,255,.85); }
   .chip .del:hover{ background:#F06A6A; color:#fff; }
+  /* 临时行为（一次性记录，不占用常用列表）：虚线边框区分 */
+  .chip.temp{ border-style:dashed; background:#FBFCFF; }
+  .chip.temp.selected{ border-style:solid; }
+  .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
 
   .custom-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .custom-row input{
@@ -306,9 +310,10 @@
       </div>
       <div class="chips" id="mainChips"></div>
       <div class="custom-row">
-        <input id="newBehavior" placeholder="自定义行为" maxlength="10">
+        <input id="newBehavior" placeholder="自定义行为（可直接标记）" maxlength="10">
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
       </div>
+      <div class="empty-tip" id="customHint" style="text-align:left;padding:4px 2px 0;font-size:12px"></div>
 
       <div class="block-title" style="display:flex;align-items:center;gap:8px">副行为
         <button class="edit-btn" id="subToggle">展开</button>
@@ -607,17 +612,31 @@ function chipEl(b,selected,onClick,deletable){
 const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
 function renderChips(){
   const mc=$("mainChips"); mc.innerHTML="";
-  store.behaviors.forEach(b=>{
+  const commons=store.behaviors.filter(b=>!b.temp);
+  const temps=store.behaviors.filter(b=>b.temp);
+  commons.forEach(b=>{
     mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors));
   });
-  if(!store.behaviors.length){
+  if(!commons.length){
     const tip=document.createElement("span"); tip.className="empty-tip"; tip.textContent="暂无常用行为，请在下方添加"; mc.appendChild(tip);
+  }
+  if(temps.length){
+    const lbl=document.createElement("span"); lbl.className="chips-sub";
+    lbl.textContent="临时行为（一次性记录，不占用常用列表）";
+    mc.appendChild(lbl);
+    temps.forEach(b=>{
+      const c=chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors);
+      c.classList.add("temp");
+      mc.appendChild(c);
+    });
   }
   const sc=$("subChips"); sc.innerHTML="";
   const none={id:null,name:"无",color:"#C6CBDB"};
   sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
   store.behaviors.filter(b=>!SUB_EXCLUDED.includes(b.name)).forEach(b=>{
-    sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
+    const c=chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false);
+    if(b.temp) c.classList.add("temp");
+    sc.appendChild(c);
   });
   updateSubToggle();
 }
@@ -637,11 +656,26 @@ function updateSubToggle(){
 }
 
 function deleteBehavior(id){
-  if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
-  store.behaviors=store.behaviors.filter(b=>b.id!==id);
+  const b=behaviorOf(id);
+  if(b && b.temp){
+    if(!confirm("删除临时行为「"+b.name+"」？其相关记录也会一并删除。")) return;
+    purgeBehavior(id);
+  }else if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
+  store.behaviors=store.behaviors.filter(x=>x.id!==id);
   if(selMain===id) selMain=null;
   if(selSub===id) selSub=null;
   saveStore();
+}
+/* 彻底清除某行为的所有记录（用于删除临时行为） */
+function purgeBehavior(id){
+  Object.keys(store.days).forEach(ds=>{
+    const sl=store.days[ds].slots;
+    Object.keys(sl).forEach(k=>{
+      const arr=sl[k].filter(x=>x!==id);
+      if(arr.length) sl[k]=arr; else delete sl[k];
+    });
+    if(!Object.keys(sl).length) delete store.days[ds];
+  });
 }
 
 /* 主行为编辑模式：仅在编辑状态下显示删除按钮，避免误触 */
@@ -652,27 +686,81 @@ $("editBehBtn").addEventListener("click",()=>{
   renderChips();
 });
 
+function findBehaviorByName(name){ return store.behaviors.find(b=>b.name===name); }
+/* 临时行为配色：按名称散列取色，同名在任何设备上颜色一致 */
+function tempColor(name){
+  let h=0;
+  for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0;
+  return PALETTE[h%PALETTE.length];
+}
+/* 解析本次要记录的主行为：优先已选行为；若输入框有自定义名称，则直接用它（自动建为临时行为，不加入常用列表） */
+function resolveMainId(){
+  if(selMain && behaviorOf(selMain)) return selMain;
+  const v=$("newBehavior").value.trim();
+  if(!v) return null;
+  let b=findBehaviorByName(v);
+  if(!b){
+    b={id:"t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:v, color:tempColor(v), temp:true};
+    store.behaviors.push(b);
+  }
+  selMain=b.id;
+  return b.id;
+}
+function updateCustomHint(){
+  const h=$("customHint");
+  const v=$("newBehavior").value.trim();
+  if(!v){ h.textContent=""; return; }
+  const b=findBehaviorByName(v);
+  if(b && !b.temp) h.textContent="「"+v+"」已是常用行为，可直接标记";
+  else if(b && b.temp) h.textContent="「"+v+"」已作为临时行为记录过，可直接标记";
+  else h.textContent="「"+v+"」将作为一次性行为记录，不会加入常用列表（如需长期使用请点右侧按钮）";
+}
+
 $("addBehavior").addEventListener("click",()=>{
   const v=$("newBehavior").value.trim();
   if(!v){ alert("请输入行为名称"); return; }
-  if(store.behaviors.some(b=>b.name===v)){ alert("已存在同名行为"); return; }
-  store.behaviors.push({id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]});
+  let b=findBehaviorByName(v);
+  if(b){
+    if(b.temp){ b.temp=false; }          // 临时行为升级为常用
+    else{ alert("已存在同名行为"); selMain=b.id; renderChips(); return; }
+  }else{
+    b={id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]};
+    store.behaviors.push(b);
+  }
+  selMain=b.id;
   $("newBehavior").value="";
   saveStore();
+  updateCustomHint();
 });
-$("newBehavior").addEventListener("keydown",e=>{ if(e.key==="Enter") $("addBehavior").click(); });
+/* 输入自定义名称即视为选中该行为（临时行为），无需先加入常用 */
+$("newBehavior").addEventListener("input",()=>{
+  const v=$("newBehavior").value.trim();
+  if(selMain && behaviorOf(selMain) && behaviorOf(selMain).name!==v) selMain=null;
+  renderChips();
+  updateCustomHint();
+});
+$("newBehavior").addEventListener("keydown",e=>{
+  if(e.key!=="Enter") return;
+  const id=resolveMainId();
+  if(id){ renderChips(); updateCustomHint(); }
+});
 
 function mark(doClear){
   const s=+$("recStart").value, e=+$("recEnd").value;
   if(e<=s){ alert("结束时间需晚于开始时间"); return; }
-  if(!doClear && !selMain){ alert("请先选择一个主行为（也可在上方输入框自定义）"); return; }
+  let mainId=null;
+  if(!doClear){
+    mainId=resolveMainId();
+    if(!mainId){ alert("请选择主行为，或在上方输入框直接输入自定义行为名称"); return; }
+  }
   const slots=slotsOfDay(recDate);
   let occupied=false;
   for(let i=s;i<e;i++) if(slots[i]){ occupied=true; break; }
   if(doClear){ if(!occupied){ return; } if(!confirm("确定清除 "+recDate+" "+slotLabel(s)+"–"+slotLabel(e)+" 的记录？")) return; }
   else if(occupied && !confirm("该时间段已有记录，是否覆盖？")) return;
-  markRange(recDate,s,e, doClear?[]:[selMain, selSub].filter(Boolean));
+  markRange(recDate,s,e, doClear?[]:[mainId, selSub].filter(Boolean));
   saveStore();
+  updateCustomHint();
 }
 $("markBtn").addEventListener("click",()=>mark(false));
 $("clearRangeBtn").addEventListener("click",()=>mark(true));
@@ -757,6 +845,7 @@ function slotStyle(ids){
 function renderRecord(){
   $("recDate").value=recDate;
   renderChips();
+  updateCustomHint();
   detectSleep();
   syncTimeBtns();
   // 当日概览条
