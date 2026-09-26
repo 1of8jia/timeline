@@ -97,7 +97,49 @@
   .time-row label{ font-size:12px; color:var(--muted); display:block; margin-bottom:2px; }
   .sleep-time-row{ flex-wrap:nowrap; }
   .sleep-time-row > div{ flex:0 1 auto; min-width:0; }
-  .sleep-time-row select{ width:128px; min-width:0; }
+
+  /* 自绘时间选择按钮 + 紧凑选择面板 */
+  .time-btn{
+    position:relative; display:block; width:108px;
+    font-family:inherit; font-size:15px; color:var(--text); text-align:left;
+    border:1px solid var(--border); border-radius:10px; background:#fff;
+    padding:7px 24px 7px 12px; cursor:pointer;
+  }
+  .time-btn:active{ border-color:var(--accent); }
+  .time-btn::after{
+    content:"▾"; position:absolute; right:9px; top:50%; transform:translateY(-50%);
+    color:var(--muted); font-size:11px;
+  }
+  .sleep-time-row .time-btn{ width:124px; }
+  .picker-mask{
+    position:fixed; inset:0; z-index:60; background:rgba(58,64,86,.35);
+    display:flex; align-items:flex-end; justify-content:center;
+    padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  }
+  .picker-sheet{
+    width:100%; max-width:320px; max-height:58vh;
+    background:#fff; border-radius:14px; overflow:hidden;
+    display:flex; flex-direction:column;
+    box-shadow:0 12px 32px rgba(40,46,70,.22);
+  }
+  .picker-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; border-bottom:1px solid var(--border);
+    font-size:14px; color:var(--muted);
+  }
+  .picker-head b{ color:var(--text); font-weight:700; }
+  .picker-head button{
+    border:none; background:transparent; color:var(--accent);
+    font-family:inherit; font-size:14px; cursor:pointer; font-weight:700;
+  }
+  .picker-list{ overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0; }
+  .picker-item{
+    padding:9px 16px; font-size:15px; color:var(--text); cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .picker-item:active{ background:#F2F4FA; }
+  .picker-item.selected{ color:var(--accent); font-weight:700; background:var(--accent-soft); }
+  .picker-item.selected::after{ content:"✓"; font-size:13px; }
 
   .chips{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{
@@ -254,9 +296,9 @@
 
       <div class="block-title">时间段（精确到10分钟）</div>
       <div class="row time-row" style="justify-content:flex-start">
-        <div><label>开始</label><select id="recStart"></select></div>
+        <div><label>开始</label><select id="recStart" hidden></select><button class="time-btn" id="recStartBtn" type="button"></button></div>
         <div style="font-size:18px;color:var(--muted);padding-top:16px">→</div>
-        <div><label>结束</label><select id="recEnd"></select></div>
+        <div><label>结束</label><select id="recEnd" hidden></select><button class="time-btn" id="recEndBtn" type="button"></button></div>
       </div>
 
       <div class="block-title" style="display:flex;align-items:center;gap:8px">主行为
@@ -282,9 +324,9 @@
     <div class="card">
       <div class="block-title">😴 睡眠快捷填充（自动跨天计算）</div>
       <div class="row time-row sleep-time-row" style="justify-content:flex-start;flex-wrap:nowrap">
-        <div><label>入睡时间</label><select id="bedSel"></select></div>
+        <div><label>入睡时间</label><select id="bedSel" hidden></select><button class="time-btn" id="bedSelBtn" type="button"></button></div>
         <div style="font-size:18px;color:var(--muted);padding-top:16px">→</div>
-        <div><label>起床时间</label><select id="wakeSel"></select></div>
+        <div><label>起床时间</label><select id="wakeSel" hidden></select><button class="time-btn" id="wakeSelBtn" type="button"></button></div>
       </div>
       <div class="empty-tip" style="text-align:left" id="sleepHint"></div>
       <div class="row actions">
@@ -345,6 +387,16 @@
 </main>
 
 <input type="file" id="importFile" hidden accept=".json">
+
+<div class="picker-mask" id="pickerMask" hidden>
+  <div class="picker-sheet">
+    <div class="picker-head">
+      <b id="pickerTitle">选择时间</b>
+      <button id="pickerClose">完成</button>
+    </div>
+    <div class="picker-list" id="pickerList"></div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -476,6 +528,56 @@ function buildTimeSelects(){
   wake.value=42;    // 默认 今天 07:00 起床
   [bed,wake].forEach(el=>el.addEventListener("change",updateSleepHint));
 }
+/* ---------- 自绘时间选择面板 ---------- */
+const TIME_PICKERS = [
+  {sel:"recStart", btn:"recStartBtn", title:"选择开始时间"},
+  {sel:"recEnd",   btn:"recEndBtn",   title:"选择结束时间"},
+  {sel:"bedSel",   btn:"bedSelBtn",   title:"选择入睡时间"},
+  {sel:"wakeSel",  btn:"wakeSelBtn",  title:"选择起床时间"}
+];
+let pickerTarget=null;
+function syncTimeBtns(){
+  TIME_PICKERS.forEach(p=>{
+    const sel=$(p.sel), btn=$(p.btn);
+    const opt=sel.options[sel.selectedIndex];
+    btn.textContent = opt ? opt.text : "--:--";
+    btn.disabled = sel.options.length===0;
+  });
+}
+function openPicker(cfg){
+  pickerTarget=$(cfg.sel);
+  $("pickerTitle").textContent=cfg.title;
+  const list=$("pickerList"); list.innerHTML="";
+  let curRow=null;
+  Array.from(pickerTarget.options).forEach(o=>{
+    if(o.hidden) return; // 不显示无效时间（如早于开始时间的结束时间）
+    const row=document.createElement("div");
+    row.className="picker-item"+(o.value===pickerTarget.value?" selected":"");
+    row.textContent=o.text;
+    row.addEventListener("click",()=>{
+      pickerTarget.value=o.value;
+      pickerTarget.dispatchEvent(new Event("change"));
+      closePicker();
+    });
+    list.appendChild(row);
+    if(o.value===pickerTarget.value) curRow=row;
+  });
+  $("pickerMask").hidden=false;
+  document.body.style.overflow="hidden";
+  if(curRow) curRow.scrollIntoView({block:"center"});
+}
+function closePicker(){
+  $("pickerMask").hidden=true;
+  document.body.style.overflow="";
+}
+TIME_PICKERS.forEach(p=>{
+  $(p.btn).addEventListener("click",()=>openPicker(p));
+  $(p.sel).addEventListener("change",syncTimeBtns);
+});
+$("pickerClose").addEventListener("click",closePicker);
+$("pickerMask").addEventListener("click",e=>{ if(e.target===$("pickerMask")) closePicker(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickerMask").hidden) closePicker(); });
+
 /* 根据开始时间刷新结束下拉：只显示 start+1 之后的选项，并默认选中 start+1（+10分钟） */
 function updateEndOptions(){
   const s=$("recStart"), e=$("recEnd");
@@ -484,6 +586,7 @@ function updateEndOptions(){
   for(let i=1;i<=SLOTS;i++) e.options[i-1].hidden = (i<=sv);
   /* 开始时间变化后，结束时间始终重置为 开始+10分钟（23:50 开始时只能选 24:00） */
   e.value = Math.min(sv+1, SLOTS);
+  syncTimeBtns();
 }
 
 function chipEl(b,selected,onClick,deletable){
@@ -611,6 +714,7 @@ function updateSleepHint(){
     return (isToday?"今天":"昨天")+slotLabel(a)+"–"+slotLabel(b);
   }).join(" ＋ ");
   hint.textContent="本次睡眠 "+h+"小时"+(m?m+"分钟":"")+"："+segs;
+  syncTimeBtns();
 }
 /* 从已有记录回填入睡/起床时间（入睡仅识别 20:00–次日05:00 范围内的记录） */
 function detectSleep(){
@@ -654,6 +758,7 @@ function renderRecord(){
   $("recDate").value=recDate;
   renderChips();
   detectSleep();
+  syncTimeBtns();
   // 当日概览条
   const strip=$("dayStrip"); strip.innerHTML="";
   const slots=slotsOfDay(recDate);
