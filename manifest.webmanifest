@@ -1,0 +1,25 @@
+{
+  "name": "时间轴 · 时间段记录",
+  "short_name": "时间轴",
+  "description": "研究生日常时间段记录：快速记录、周视图总览、饼图统计",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F7FB",
+  "theme_color": "#6C7BD9",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
