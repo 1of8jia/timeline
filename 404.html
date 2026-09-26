@@ -801,13 +801,13 @@ $("wkExport").addEventListener("click",exportWeekImage);
 /* 用 Canvas 重绘周视图并导出为 JPG */
 function exportWeekImage(){
   const mon=parseISO(weekMonday);
-  const P=24;               // 外边距
-  const HOUR_W=34;          // 小时列宽
-  const DAY_W=104;          // 每天列宽
-  const SLOT_H=4.4;         // 每10分钟格高
-  const HEAD_H=42;          // 日期表头高
-  const LEGEND_H=64;        // 底部图例高
-  const TITLE_H=52;         // 标题区高
+  const P=18;               // 外边距
+  const HOUR_W=30;          // 小时列宽
+  const DAY_W=76;           // 每天列宽（压缩以适应手机屏幕）
+  const SLOT_H=4;           // 每10分钟格高
+  const HEAD_H=38;          // 日期表头高
+  const LEGEND_H=56;        // 底部图例高
+  const TITLE_H=72;         // 标题区高
   const W=P*2+HOUR_W+7*DAY_W;
   const H=TITLE_H+HEAD_H+SLOTS*SLOT_H+LEGEND_H;
   const cv=document.createElement("canvas");
@@ -818,16 +818,16 @@ function exportWeekImage(){
   ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
   const gridX=P+HOUR_W, gridY=TITLE_H+HEAD_H;
 
-  /* 标题 */
+  /* 标题（与日期表头分区，避免重叠） */
   ctx.fillStyle="#3B4256"; ctx.textAlign="center"; ctx.textBaseline="middle";
-  ctx.font="bold 19px 'Microsoft YaHei'";
+  ctx.font="bold 17px 'Microsoft YaHei'";
   const sun=addDays(mon,6);
-  ctx.fillText("时间轴 · 周视图", W/2, P+12);
-  ctx.font="13px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
-  ctx.fillText((mon.getMonth()+1)+"月"+mon.getDate()+"日 – "+(sun.getMonth()+1)+"月"+sun.getDate()+"日", W/2, P+34);
+  ctx.fillText("时间轴 · 周视图", W/2, P+9);
+  ctx.font="12px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  ctx.fillText((mon.getMonth()+1)+"月"+mon.getDate()+"日 – "+(sun.getMonth()+1)+"月"+sun.getDate()+"日", W/2, P+30);
 
   /* 小时刻度 */
-  ctx.textAlign="right"; ctx.font="10px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  ctx.textAlign="right"; ctx.font="9px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
   for(let h=0;h<24;h+=2){
     ctx.fillText(pad(h)+":00", P+HOUR_W-4, gridY+h*6*SLOT_H+SLOT_H*3);
   }
@@ -837,10 +837,10 @@ function exportWeekImage(){
   for(let d=0;d<7;d++){
     const dayDate=addDays(mon,d), date=fmtDate(dayDate);
     const x=gridX+d*DAY_W;
-    ctx.font=(date===today?"bold 13px":"'13px'")+" 'Microsoft YaHei'";
+    ctx.font=(date===today?"bold 12px":"12px")+" 'Microsoft YaHei'";
     ctx.fillStyle=date===today?"#6C7BD9":"#3B4256";
-    ctx.fillText((dayDate.getMonth()+1)+"/"+dayDate.getDate(), x+DAY_W/2, TITLE_H+10);
-    ctx.font="11px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+    ctx.fillText((dayDate.getMonth()+1)+"/"+dayDate.getDate(), x+DAY_W/2, TITLE_H+11);
+    ctx.font="10px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
     ctx.fillText(WD[dayDate.getDay()], x+DAY_W/2, TITLE_H+27);
     ctx.fillStyle="#EFF1F6"; ctx.fillRect(x+1, gridY, DAY_W-2, SLOTS*SLOT_H);
   }
@@ -861,7 +861,7 @@ function exportWeekImage(){
         ctx.fillStyle=g; ctx.fillRect(x+1,y,DAY_W-2,hpx);
       }
       if(rng.end-rng.start>=3 && hpx>=14){
-        ctx.fillStyle="#FFFFFF"; ctx.font="10px 'Microsoft YaHei'";
+        ctx.fillStyle="#FFFFFF"; ctx.font="9px 'Microsoft YaHei'";
         ctx.fillText(rng.ids.map(nameOf).join("＋"), x+DAY_W/2, y+hpx/2);
       }
     });
@@ -871,14 +871,14 @@ function exportWeekImage(){
   ctx.strokeRect(gridX+.5, gridY+.5, 7*DAY_W-1, SLOTS*SLOT_H-1);
   for(let d=1;d<7;d++){ ctx.beginPath(); ctx.moveTo(gridX+d*DAY_W+.5,gridY); ctx.lineTo(gridX+d*DAY_W+.5,gridY+SLOTS*SLOT_H); ctx.stroke(); }
   /* 图例 */
-  const lgY=gridY+SLOTS*SLOT_H+22;
+  const lgY=gridY+SLOTS*SLOT_H+20;
   let lx=P, ly=lgY;
-  ctx.font="12px 'Microsoft YaHei'"; ctx.textAlign="left";
+  ctx.font="11px 'Microsoft YaHei'"; ctx.textAlign="left";
   store.behaviors.forEach(b=>{
-    ctx.fillStyle=b.color; ctx.fillRect(lx,ly-5,12,12);
-    ctx.fillStyle="#3B4256"; ctx.fillText(b.name, lx+17, ly+1);
-    lx+=17+ctx.measureText(b.name).width+18;
-    if(lx>W-110){ lx=P; ly+=24; }
+    ctx.fillStyle=b.color; ctx.fillRect(lx,ly-5,11,11);
+    ctx.fillStyle="#3B4256"; ctx.fillText(b.name, lx+15, ly+1);
+    lx+=15+ctx.measureText(b.name).width+14;
+    if(lx>W-90){ lx=P; ly+=20; }
   });
   /* 导出下载 */
   const a=document.createElement("a");
