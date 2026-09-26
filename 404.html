@@ -164,6 +164,15 @@
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
   .chip .pal{ font-style:normal; font-size:11px; opacity:.65; }
   .chip .pal:hover{ opacity:1; }
+  /* 编辑模式下长按拖动排序：禁止触摸滚动，避免拖拽与页面滚动冲突 */
+  .chips.editing .chip{ touch-action:none; }
+  .drag-clone{
+    position:fixed; z-index:95; pointer-events:none; margin:0;
+    transform:translate(-50%,-50%) rotate(2deg) scale(1.06);
+    box-shadow:0 10px 26px rgba(40,46,70,.32);
+  }
+  .drag-src{ opacity:.25; }
+  .edit-tip{ font-size:12px; color:var(--muted); margin-top:8px; }
 
   /* 取色器（无透明度） */
   .pick-mask{
@@ -363,6 +372,7 @@
         <button class="edit-btn" id="editBehBtn" title="编辑常用行为（删除等）">编辑</button>
       </div>
       <div class="chips" id="mainChips"></div>
+      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 🎨 或双击改颜色 · × 删除</div>
       <div class="custom-row">
         <input id="newBehavior" placeholder="自定义行为（可直接标记）" maxlength="10">
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
@@ -691,6 +701,7 @@ function chipEl(b,selected,onClick,deletable){
   const c=document.createElement("span");
   c.className="chip"+(selected?" selected":"");
   c.style.setProperty("--c",b.color);
+  if(b.id) c.dataset.bid=b.id;
   const t=document.createElement("span"); t.textContent=b.name; c.appendChild(t);
   if(deletable){
     /* 改色入口：编辑模式下双击行为即可调出取色器（🎨 按钮便于手机点按） */
@@ -806,9 +817,12 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").h
 const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
 function renderChips(){
   const mc=$("mainChips"); mc.innerHTML="";
+  mc.classList.toggle("editing",editingBehaviors);
   const commons=store.behaviors.filter(b=>!b.temp);
   commons.forEach(b=>{
-    mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors));
+    const c=chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors);
+    if(editingBehaviors) makeSortable(c);
+    mc.appendChild(c);
   });
   if(!commons.length){
     const tip=document.createElement("span"); tip.className="empty-tip"; tip.textContent="暂无常用行为，请在下方添加"; mc.appendChild(tip);
@@ -864,8 +878,82 @@ $("editBehBtn").addEventListener("click",()=>{
   editingBehaviors=!editingBehaviors;
   $("editBehBtn").textContent = editingBehaviors?"完成":"编辑";
   $("editBehBtn").classList.toggle("active",editingBehaviors);
+  $("editHint").hidden=!editingBehaviors;
   renderChips();
 });
+
+/* ---------- 编辑模式：长按拖动自由排序 ---------- */
+const DRAG_DELAY=280, DRAG_SLOP=8;
+function makeSortable(chip){
+  let timer=null, dragging=false, clone=null, sx=0, sy=0, suppressClick=false;
+  const cancel=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  const endDrag=(commit)=>{
+    cancel();
+    if(!dragging) return;
+    dragging=false;
+    suppressClick=true;
+    if(clone){ clone.remove(); clone=null; }
+    chip.classList.remove("drag-src");
+    if(commit) saveChipOrder();
+  };
+  /* 拖拽结束后吞掉紧随的 click，避免误改选中状态 */
+  chip.addEventListener("click",e=>{
+    if(suppressClick){ suppressClick=false; e.stopPropagation(); e.preventDefault(); }
+  },true);
+  chip.addEventListener("pointerdown",e=>{
+    if(e.target.closest(".del")||e.target.closest(".pal")) return;
+    if(e.button!==undefined && e.button!==0) return;
+    sx=e.clientX; sy=e.clientY;
+    cancel();
+    timer=setTimeout(()=>{
+      timer=null;
+      dragging=true;
+      try{ chip.setPointerCapture(e.pointerId); }catch(_){}
+      if(navigator.vibrate) navigator.vibrate(20);
+      clone=chip.cloneNode(true);
+      clone.classList.add("drag-clone");
+      clone.classList.remove("selected");
+      clone.style.width=chip.offsetWidth+"px";
+      document.body.appendChild(clone);
+      chip.classList.add("drag-src");
+      move(e);
+    },DRAG_DELAY);
+  });
+  chip.addEventListener("pointermove",e=>{
+    if(!dragging){
+      if(timer && (Math.abs(e.clientX-sx)>DRAG_SLOP || Math.abs(e.clientY-sy)>DRAG_SLOP)) cancel();
+      return;
+    }
+    e.preventDefault();
+    move(e);
+  });
+  ["pointerup","pointercancel"].forEach(t=>chip.addEventListener(t,ev=>{ endDrag(ev.type==="pointerup"); }));
+  function move(e){
+    clone.style.left=e.clientX+"px";
+    clone.style.top=e.clientY+"px";
+    /* 指针落到哪个标签上，就把原标签插到它前面/后面 */
+    const box=$("mainChips");
+    const sibs=[...box.querySelectorAll(".chip[data-bid]")].filter(el=>el!==chip);
+    for(const s of sibs){
+      const r=s.getBoundingClientRect();
+      if(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom){
+        const before = e.clientY < r.top + r.height/2;
+        box.insertBefore(chip, before ? s : s.nextSibling);
+        break;
+      }
+    }
+  }
+}
+/* 按当前 DOM 顺序保存行为排序 */
+function saveChipOrder(){
+  const ids=[...$("mainChips").querySelectorAll(".chip[data-bid]")].map(el=>el.dataset.bid);
+  const map=new Map(store.behaviors.map(b=>[b.id,b]));
+  const next=ids.map(id=>map.get(id)).filter(Boolean);
+  if(next.length===store.behaviors.length && next.some((b,i)=>b!==store.behaviors[i])){
+    store.behaviors=next;
+    saveStore();
+  }
+}
 
 function findBehaviorByName(name){ return store.behaviors.find(b=>b.name===name); }
 /* 临时行为配色：按名称散列取色，同名在任何设备上颜色一致 */
