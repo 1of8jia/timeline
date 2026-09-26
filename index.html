@@ -441,6 +441,18 @@ function loadStore(){
 }
 /* 将旧数据迁移到分组配色：按名称更新默认行为颜色并补齐新增项（保留原id，历史记录不受影响），自定义行为排在后面 */
 function migrate(){
+  /* 旧版"临时行为"（temp:true）→ 内联伪 id "~名称"，与行为列表彻底解耦 */
+  store.behaviors.filter(b=>b.temp).forEach(t=>{
+    const dup=store.behaviors.find(b=>!b.temp && b.name===t.name);
+    const target=dup?dup.id:("~"+t.name);
+    Object.keys(store.days).forEach(ds=>{
+      const sl=store.days[ds].slots;
+      Object.keys(sl).forEach(k=>{
+        if(sl[k].includes(t.id)) sl[k]=sl[k].map(x=>x===t.id?target:x);
+      });
+    });
+  });
+  store.behaviors=store.behaviors.filter(b=>!b.temp);
   const customs = store.behaviors.filter(b=>!PRESETS.some(p=>p.name===b.name));
   const kept = PRESETS.map(p=>{
     const old = store.behaviors.find(b=>b.name===p.name);
@@ -465,8 +477,11 @@ function slotLabel(i){
   return pad(Math.floor(i/6))+":"+pad((i%6)*10);
 }
 function behaviorOf(id){ return store.behaviors.find(b=>b.id===id); }
-function colorOf(id){ const b=behaviorOf(id); return b?b.color:"#C6CBDB"; }
-function nameOf(id){ const b=behaviorOf(id); return b?b.name:"(已删除)"; }
+/* 内联临时行为：id 形如 "~名称"，仅存在于记录中，不占用行为列表 */
+function isInlineId(id){ return typeof id==="string" && id[0]==="~"; }
+function inlineName(id){ return id.slice(1); }
+function colorOf(id){ if(isInlineId(id)) return tempColor(inlineName(id)); const b=behaviorOf(id); return b?b.color:"#C6CBDB"; }
+function nameOf(id){ if(isInlineId(id)) return inlineName(id); const b=behaviorOf(id); return b?b.name:"(已删除)"; }
 function isSleep(id){ const b=behaviorOf(id); return !!b && b.name==="睡觉"; }
 
 /* ---------- 状态 ---------- */
@@ -613,30 +628,32 @@ const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比
 function renderChips(){
   const mc=$("mainChips"); mc.innerHTML="";
   const commons=store.behaviors.filter(b=>!b.temp);
-  const temps=store.behaviors.filter(b=>b.temp);
   commons.forEach(b=>{
     mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors));
   });
   if(!commons.length){
     const tip=document.createElement("span"); tip.className="empty-tip"; tip.textContent="暂无常用行为，请在下方添加"; mc.appendChild(tip);
   }
-  if(temps.length){
+  /* 当前临时行为仅显示一个预览标签（只代表这一次记录，不保存到列表） */
+  const tempName = isInlineId(selMain) ? inlineName(selMain) : $("newBehavior").value.trim();
+  if(tempName && !findBehaviorByName(tempName)){
+    const pid="~"+tempName;
     const lbl=document.createElement("span"); lbl.className="chips-sub";
-    lbl.textContent="临时行为（一次性记录，不占用常用列表）";
+    lbl.textContent="本次临时行为（仅这一条记录有效，不保存）";
     mc.appendChild(lbl);
-    temps.forEach(b=>{
-      const c=chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors);
-      c.classList.add("temp");
-      mc.appendChild(c);
-    });
+    const c=chipEl({id:pid,name:tempName,color:tempColor(tempName)}, selMain===pid, ()=>{
+      selMain = selMain===pid?null:pid;
+      if(selMain) $("newBehavior").value=tempName; else $("newBehavior").value="";
+      renderChips(); updateCustomHint();
+    }, false);
+    c.classList.add("temp");
+    mc.appendChild(c);
   }
   const sc=$("subChips"); sc.innerHTML="";
   const none={id:null,name:"无",color:"#C6CBDB"};
   sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
   store.behaviors.filter(b=>!SUB_EXCLUDED.includes(b.name)).forEach(b=>{
-    const c=chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false);
-    if(b.temp) c.classList.add("temp");
-    sc.appendChild(c);
+    sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
   });
   updateSubToggle();
 }
@@ -656,26 +673,11 @@ function updateSubToggle(){
 }
 
 function deleteBehavior(id){
-  const b=behaviorOf(id);
-  if(b && b.temp){
-    if(!confirm("删除临时行为「"+b.name+"」？其相关记录也会一并删除。")) return;
-    purgeBehavior(id);
-  }else if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
-  store.behaviors=store.behaviors.filter(x=>x.id!==id);
+  if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
+  store.behaviors=store.behaviors.filter(b=>b.id!==id);
   if(selMain===id) selMain=null;
   if(selSub===id) selSub=null;
   saveStore();
-}
-/* 彻底清除某行为的所有记录（用于删除临时行为） */
-function purgeBehavior(id){
-  Object.keys(store.days).forEach(ds=>{
-    const sl=store.days[ds].slots;
-    Object.keys(sl).forEach(k=>{
-      const arr=sl[k].filter(x=>x!==id);
-      if(arr.length) sl[k]=arr; else delete sl[k];
-    });
-    if(!Object.keys(sl).length) delete store.days[ds];
-  });
 }
 
 /* 主行为编辑模式：仅在编辑状态下显示删除按钮，避免误触 */
@@ -693,56 +695,57 @@ function tempColor(name){
   for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0;
   return PALETTE[h%PALETTE.length];
 }
-/* 解析本次要记录的主行为：优先已选行为；若输入框有自定义名称，则直接用它（自动建为临时行为，不加入常用列表） */
+/* 解析本次要记录的主行为：输入框有自定义名称 → 内联伪 id "~名称"（仅本次记录有效，不加入行为列表）；否则用已选常用行为 */
 function resolveMainId(){
-  if(selMain && behaviorOf(selMain)) return selMain;
   const v=$("newBehavior").value.trim();
-  if(!v) return null;
-  let b=findBehaviorByName(v);
-  if(!b){
-    b={id:"t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:v, color:tempColor(v), temp:true};
-    store.behaviors.push(b);
+  if(v){
+    const b=findBehaviorByName(v);
+    return b ? b.id : "~"+v;
   }
-  selMain=b.id;
-  return b.id;
+  if(selMain && (isInlineId(selMain) || behaviorOf(selMain))) return selMain;
+  return null;
 }
 function updateCustomHint(){
   const h=$("customHint");
   const v=$("newBehavior").value.trim();
   if(!v){ h.textContent=""; return; }
   const b=findBehaviorByName(v);
-  if(b && !b.temp) h.textContent="「"+v+"」已是常用行为，可直接标记";
-  else if(b && b.temp) h.textContent="「"+v+"」已作为临时行为记录过，可直接标记";
-  else h.textContent="「"+v+"」将作为一次性行为记录，不会加入常用列表（如需长期使用请点右侧按钮）";
+  if(b) h.textContent="「"+v+"」已是常用行为，将按常用行为记录";
+  else h.textContent="「"+v+"」仅作为本次记录的名称，不保存、不占用列表（下次同名记录颜色自动一致）";
 }
 
 $("addBehavior").addEventListener("click",()=>{
   const v=$("newBehavior").value.trim();
   if(!v){ alert("请输入行为名称"); return; }
   let b=findBehaviorByName(v);
-  if(b){
-    if(b.temp){ b.temp=false; }          // 临时行为升级为常用
-    else{ alert("已存在同名行为"); selMain=b.id; renderChips(); return; }
-  }else{
-    b={id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]};
-    store.behaviors.push(b);
-  }
+  if(b){ alert("已存在同名行为"); selMain=b.id; $("newBehavior").value=""; renderChips(); updateCustomHint(); return; }
+  b={id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]};
+  store.behaviors.push(b);
+  /* 此前以内联名称 "~v" 记录的时段归并到新常用行为下，统计颜色统一 */
+  const pseudo="~"+v;
+  Object.keys(store.days).forEach(ds=>{
+    const sl=store.days[ds].slots;
+    Object.keys(sl).forEach(k=>{
+      if(sl[k].includes(pseudo)) sl[k]=sl[k].map(x=>x===pseudo?b.id:x);
+    });
+  });
   selMain=b.id;
   $("newBehavior").value="";
   saveStore();
   updateCustomHint();
 });
-/* 输入自定义名称即视为选中该行为（临时行为），无需先加入常用 */
+/* 输入自定义名称即视为本次记录的名称（内联临时行为），无需加入常用 */
 $("newBehavior").addEventListener("input",()=>{
   const v=$("newBehavior").value.trim();
-  if(selMain && behaviorOf(selMain) && behaviorOf(selMain).name!==v) selMain=null;
+  const cur = selMain ? (isInlineId(selMain)?inlineName(selMain):(behaviorOf(selMain)?behaviorOf(selMain).name:null)) : null;
+  if(cur!==v) selMain=null;
   renderChips();
   updateCustomHint();
 });
 $("newBehavior").addEventListener("keydown",e=>{
   if(e.key!=="Enter") return;
   const id=resolveMainId();
-  if(id){ renderChips(); updateCustomHint(); }
+  if(id){ selMain=id; renderChips(); updateCustomHint(); }
 });
 
 function mark(doClear){
@@ -759,6 +762,8 @@ function mark(doClear){
   if(doClear){ if(!occupied){ return; } if(!confirm("确定清除 "+recDate+" "+slotLabel(s)+"–"+slotLabel(e)+" 的记录？")) return; }
   else if(occupied && !confirm("该时间段已有记录，是否覆盖？")) return;
   markRange(recDate,s,e, doClear?[]:[mainId, selSub].filter(Boolean));
+  /* 内联临时行为仅本次有效：记录完成后清空，不影响后续 */
+  if(!doClear && isInlineId(mainId)){ selMain=null; $("newBehavior").value=""; }
   saveStore();
   updateCustomHint();
 }
@@ -895,9 +900,15 @@ function exportWeekImage(){
   const DAY_W=60;           // 每天列宽（压缩以适应手机屏幕）
   const SLOT_H=4.8;         // 每10分钟格高（拉长整体比例）
   const HEAD_H=38;          // 日期表头高
-  const LEGEND_H=56;        // 底部图例高
   const TITLE_H=72;         // 标题区高
   const W=P*2+HOUR_W+7*DAY_W;
+  /* 图例条目：从本周实际记录中收集（含内联临时行为），高度按行数自适应 */
+  const usedIds=[];
+  for(let d=0;d<7;d++) rangesOfDay(fmtDate(addDays(mon,d))).forEach(r=>r.ids.forEach(x=>{ if(!usedIds.includes(x)) usedIds.push(x); }));
+  const estW=id=>29+nameOf(id).length*11;
+  let rows=1,acc=P;
+  usedIds.forEach(id=>{ acc+=estW(id); if(acc>W-90){ rows++; acc=P+estW(id); } });
+  const LEGEND_H=rows*20+16;
   const H=TITLE_H+HEAD_H+SLOTS*SLOT_H+LEGEND_H;
   const cv=document.createElement("canvas");
   const dpr=2;
@@ -963,10 +974,10 @@ function exportWeekImage(){
   const lgY=gridY+SLOTS*SLOT_H+20;
   let lx=P, ly=lgY;
   ctx.font="11px 'Microsoft YaHei'"; ctx.textAlign="left";
-  store.behaviors.forEach(b=>{
-    ctx.fillStyle=b.color; ctx.fillRect(lx,ly-5,11,11);
-    ctx.fillStyle="#3B4256"; ctx.fillText(b.name, lx+15, ly+1);
-    lx+=15+ctx.measureText(b.name).width+14;
+  usedIds.forEach(id=>{
+    ctx.fillStyle=colorOf(id); ctx.fillRect(lx,ly-5,11,11);
+    ctx.fillStyle="#3B4256"; ctx.fillText(nameOf(id), lx+15, ly+1);
+    lx+=15+ctx.measureText(nameOf(id)).width+14;
     if(lx>W-90){ lx=P; ly+=20; }
   });
   /* 导出下载 */
@@ -1026,12 +1037,14 @@ function renderWeek(){
     col.appendChild(body);
     grid.appendChild(col);
   }
-  // 图例
+  // 图例：从本周实际记录中收集（含内联临时行为）
   const lg=$("weekLegend"); lg.innerHTML="";
-  store.behaviors.forEach(b=>{
+  const usedIds=[];
+  for(let d=0;d<7;d++) rangesOfDay(fmtDate(addDays(mon,d))).forEach(r=>r.ids.forEach(x=>{ if(!usedIds.includes(x)) usedIds.push(x); }));
+  usedIds.forEach(id=>{
     const s=document.createElement("span");
-    const d=document.createElement("i"); d.className="dot"; d.style.background=b.color;
-    s.appendChild(d); s.appendChild(document.createTextNode(b.name));
+    const d=document.createElement("i"); d.className="dot"; d.style.background=colorOf(id);
+    s.appendChild(d); s.appendChild(document.createTextNode(nameOf(id)));
     lg.appendChild(s);
   });
 }
@@ -1081,7 +1094,7 @@ function totals(dates){
   dates.forEach(ds=>{
     const slots=slotsOfDay(ds);
     for(const k in slots){
-      const ids=slots[k].filter(id=>behaviorOf(id));
+      const ids=slots[k].filter(id=>isInlineId(id)||behaviorOf(id));
       if(!ids.length) continue;
       const share=ids.length>1?5:10;
       ids.forEach(id=>{ t[id]=(t[id]||0)+share; });
