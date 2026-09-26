@@ -162,8 +162,6 @@
   .chip.temp{ border-style:dashed; background:#FBFCFF; }
   .chip.temp.selected{ border-style:solid; }
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
-  .chip .pal{ font-style:normal; font-size:11px; opacity:.65; }
-  .chip .pal:hover{ opacity:1; }
   /* 编辑模式下长按拖动排序：禁止触摸滚动/系统菜单，避免拖拽与滚动冲突 */
   .chips.editing .chip{ touch-action:none; -webkit-touch-callout:none; }
   .drag-clone{
@@ -374,7 +372,7 @@
         <button class="edit-btn" id="editBehBtn" title="编辑常用行为（删除等）">编辑</button>
       </div>
       <div class="chips" id="mainChips"></div>
-      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 🎨 或双击改颜色 · × 删除</div>
+      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 双击改颜色 · × 删除</div>
       <div class="custom-row">
         <input id="newBehavior" placeholder="自定义行为（可直接标记）" maxlength="10">
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
@@ -706,12 +704,8 @@ function chipEl(b,selected,onClick,deletable){
   if(b.id) c.dataset.bid=b.id;
   const t=document.createElement("span"); t.textContent=b.name; c.appendChild(t);
   if(deletable){
-    /* 改色入口：编辑模式下双击行为即可调出取色器（🎨 按钮便于手机点按） */
+    /* 改色入口：编辑模式下双击行为即可调出取色器 */
     if(!isInlineId(b.id)){
-      const p=document.createElement("i"); p.className="pal"; p.textContent="🎨"; p.title="修改颜色";
-      p.addEventListener("click",ev=>{ ev.stopPropagation(); openPicker(b.id,b.name,colorOf(b.id)); });
-      p.addEventListener("dblclick",ev=>ev.stopPropagation());
-      c.appendChild(p);
       c.addEventListener("dblclick",()=>openPicker(b.id,b.name,colorOf(b.id)));
       c.title="双击可修改颜色";
     }
@@ -931,7 +925,7 @@ function makeSortable(chip){
     move(e);
   }
   chip.addEventListener("pointerdown",e=>{
-    if(e.target.closest(".del")||e.target.closest(".pal")) return;
+    if(e.target.closest(".del")) return;
     if(e.button!==undefined && e.button!==0) return;
     if(draggingChip) return;
     sx=e.clientX; sy=e.clientY;
@@ -953,7 +947,7 @@ function makeSortable(chip){
     clone=chip.cloneNode(true);
     clone.classList.add("drag-clone");
     clone.classList.remove("selected");
-    clone.querySelectorAll(".pal,.del").forEach(el=>el.remove());  // 悬浮标签上不显示操作按钮
+    clone.querySelectorAll(".del").forEach(el=>el.remove());  // 悬浮标签上不显示删除按钮
     clone.style.width=r.width+"px";
     document.body.appendChild(clone);
     ph=document.createElement("span");
