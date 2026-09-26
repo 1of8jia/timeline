@@ -525,9 +525,9 @@ let store;
 function loadStore(){
   try{
     const raw = localStorage.getItem(KEY);
-    if(raw){ store = JSON.parse(raw); if(!store.behaviors || !store.days) throw 0; migrate(); return; }
+    if(raw){ store = JSON.parse(raw); if(!store.behaviors || !store.days) throw 0; if(store.v!==1) { migrate(); store.v=1; save(); } return; }
   }catch(e){}
-  store = { behaviors: PRESETS.slice(), days:{} };
+  store = { v:1, behaviors: PRESETS.slice(), days:{} };
 }
 /* 将旧数据迁移到分组配色：按名称更新默认行为颜色并补齐新增项（保留原id，历史记录不受影响），自定义行为排在后面 */
 function migrate(){
