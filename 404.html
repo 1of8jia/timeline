@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6C7BD9">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="时间轴">
+<title>时间轴 · 时间段记录</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='none' stroke='%236C7BD9' stroke-width='5'/%3E%3Cpath d='M32 16v16l12 8' fill='none' stroke='%236C7BD9' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
+<style>
+  :root{
+    --bg:#F6F7FB; --card:#FFFFFF; --text:#3B4256; --muted:#8A91A8;
+    --accent:#6C7BD9; --accent-soft:#EEF0FB; --border:#E7E9F2;
+    --radius:14px; --slot:6px;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    font-family:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;
+    background:var(--bg); color:var(--text);
+    font-size:15px; line-height:1.5;
+  }
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(255,255,255,.92); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);
+  }
+  .header-inner{
+    max-width:960px; margin:0 auto; padding:10px 16px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .app-title{ font-size:18px; font-weight:700; letter-spacing:1px; }
+  .app-title small{ color:var(--muted); font-weight:400; font-size:12px; margin-left:6px; }
+  .header-actions{ display:flex; gap:8px; }
+  .icon-btn{
+    border:1px solid var(--border); background:#fff; color:var(--muted);
+    border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer;
+    font-family:inherit;
+  }
+  .icon-btn:hover{ color:var(--accent); border-color:var(--accent); }
+
+  nav.tabs{
+    position:sticky; top:47px; z-index:19;
+    background:rgba(246,247,251,.95); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);
+  }
+  .tabs-inner{
+    max-width:960px; margin:0 auto; padding:8px 16px;
+    display:flex; gap:8px;
+  }
+  .tab{
+    flex:1; border:none; background:transparent; cursor:pointer;
+    padding:8px 0; font-size:15px; color:var(--muted);
+    font-family:inherit; border-radius:10px; transition:all .15s;
+  }
+  .tab.active{ background:var(--accent); color:#fff; font-weight:700; }
+
+  main{ max-width:960px; margin:0 auto; padding:16px 16px 90px; }
+  .card{
+    background:var(--card); border-radius:var(--radius);
+    box-shadow:0 2px 10px rgba(80,90,140,.06);
+    padding:18px; margin-bottom:16px;
+  }
+  .block-title{ font-size:13px; color:var(--muted); margin:14px 0 8px; font-weight:700; letter-spacing:.5px; }
+  .block-title:first-child{ margin-top:0; }
+
+  .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .nav-row{ justify-content:center; margin-bottom:6px; gap:8px; }
+  .nav-btn{
+    border:1px solid var(--border); background:#fff; border-radius:8px;
+    width:34px; height:34px; cursor:pointer; color:var(--muted); font-size:14px;
+  }
+  .nav-btn:hover{ color:var(--accent); border-color:var(--accent); }
+  .nav-label{ font-size:15px; font-weight:700; min-width:180px; text-align:center; }
+
+  input[type="date"]{
+    font-family:inherit; font-size:15px; color:var(--text);
+    border:1px solid var(--border); border-radius:10px; padding:7px 10px; background:#fff;
+  }
+  select{
+    font-family:inherit; font-size:15px; color:var(--text);
+    border:1px solid var(--border); border-radius:10px; padding:7px 10px; background:#fff; min-width:110px;
+  }
+  .time-row label{ font-size:12px; color:var(--muted); display:block; margin-bottom:2px; }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    display:inline-flex; align-items:center; gap:5px;
+    border:1.5px solid var(--c,#ccc); color:var(--text);
+    border-radius:999px; padding:5px 13px; font-size:14px; cursor:pointer;
+    background:#fff; user-select:none; transition:all .12s;
+  }
+  .chip:hover{ box-shadow:0 1px 6px rgba(0,0,0,.08); }
+  .chip.selected{ background:var(--c); border-color:var(--c); color:#fff; font-weight:700; }
+  .chip.neutral{ --c:#C6CBDB; }
+  .chip .del{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; border-radius:50%; font-size:11px; line-height:1;
+    color:var(--muted); background:rgba(0,0,0,.05); font-style:normal;
+  }
+  .chip.selected .del{ color:var(--c); background:rgba(255,255,255,.85); }
+  .chip .del:hover{ background:#F06A6A; color:#fff; }
+
+  .custom-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .custom-row input{
+    flex:1; min-width:150px; font-family:inherit; font-size:14px;
+    border:1px solid var(--border); border-radius:10px; padding:7px 12px;
+  }
+  .custom-row input:focus{ outline:none; border-color:var(--accent); }
+
+  button.primary{
+    background:var(--accent); color:#fff; border:none; border-radius:10px;
+    padding:10px 22px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  button.primary:hover{ filter:brightness(1.06); }
+  button.ghost{
+    background:#fff; color:var(--muted); border:1px solid var(--border);
+    border-radius:10px; padding:10px 18px; font-size:14px; cursor:pointer; font-family:inherit;
+  }
+  button.ghost:hover{ color:#F06A6A; border-color:#F06A6A; }
+  .actions{ margin-top:16px; }
+
+  .day-strip{
+    display:flex; height:22px; border-radius:8px; overflow:hidden;
+    background:#EDEFF5; border:1px solid var(--border);
+  }
+  .day-strip i{ flex:1; }
+  .strip-scale{ display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:3px; }
+
+  .range-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:9px 4px; border-bottom:1px dashed var(--border); font-size:14px;
+  }
+  .range-row:last-child{ border-bottom:none; }
+  .range-time{ font-weight:700; white-space:nowrap; }
+  .range-name{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; flex:1; margin-left:6px; }
+  .dot{ width:10px; height:10px; border-radius:3px; display:inline-block; flex:none; }
+  .range-del{
+    border:none; background:transparent; color:#C3C8D8; cursor:pointer; font-size:15px; padding:2px 6px;
+  }
+  .range-del:hover{ color:#F06A6A; }
+  .empty-tip{ color:var(--muted); font-size:13px; text-align:center; padding:14px 0; }
+
+  /* 周视图 */
+  .week-scroll{ overflow-x:auto; }
+  .week-grid{ display:flex; min-width:560px; }
+  .hour-col{ width:34px; flex:none; }
+  .hour-mark{ height:calc(var(--slot) * 6); font-size:10px; color:var(--muted); text-align:right; padding-right:5px; line-height:1; position:relative; top:-4px; }
+  .day-col{ flex:1; min-width:64px; }
+  .day-head{
+    text-align:center; font-size:12px; color:var(--muted); padding-bottom:6px;
+  }
+  .day-head b{ display:block; font-size:14px; color:var(--text); }
+  .day-head.today b{ color:var(--accent); }
+  .day-slots{ border-radius:6px; overflow:hidden; border:1px solid var(--border); position:relative; }
+  .wslot{ height:var(--slot); background:#EFF1F6; cursor:pointer; }
+  .wslot:hover{ outline:1px solid var(--accent); outline-offset:-1px; z-index:2; position:relative; }
+  .wlabel{
+    position:absolute; left:0; right:0; z-index:3; pointer-events:none;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; color:#fff; line-height:1.1; overflow:hidden;
+    text-shadow:0 1px 2px rgba(0,0,0,.35);
+    white-space:nowrap;
+  }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px 16px; font-size:13px; color:var(--muted); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+
+  /* 统计 */
+  .seg{ display:flex; background:var(--accent-soft); border-radius:10px; padding:4px; gap:4px; margin-bottom:14px; }
+  .seg button{
+    flex:1; border:none; background:transparent; padding:7px 0; font-family:inherit;
+    font-size:14px; color:var(--muted); border-radius:8px; cursor:pointer;
+  }
+  .seg button.active{ background:#fff; color:var(--accent); font-weight:700; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .sleep-row{ justify-content:center; margin:4px 0 10px; }
+  .sleep-row label{ display:flex; align-items:center; gap:6px; font-size:14px; color:var(--text); cursor:pointer; }
+  .sleep-row input{ width:16px; height:16px; accent-color:var(--accent); }
+  .chart-wrap{ display:flex; justify-content:center; padding:8px 0 4px; }
+  .stat-row{
+    display:flex; align-items:center; gap:10px; padding:9px 4px;
+    border-bottom:1px dashed var(--border); font-size:14px;
+  }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-name{ flex:1; display:flex; align-items:center; gap:8px; }
+  .stat-val{ color:var(--muted); font-size:13px; white-space:nowrap; }
+  .stat-bar{ height:6px; border-radius:3px; background:#EFF1F6; flex:none; width:110px; overflow:hidden; }
+  .stat-bar i{ display:block; height:100%; border-radius:3px; }
+
+  @media (max-width:700px){
+    nav.tabs{
+      top:auto; bottom:0; border-top:1px solid var(--border); border-bottom:none;
+      padding-bottom:env(safe-area-inset-bottom);
+    }
+    .tabs-inner{ padding:6px 12px; }
+    .tab{ padding:10px 0; }
+    main{ padding:12px 12px 86px; }
+    .nav-label{ min-width:150px; font-size:14px; }
+    .stat-bar{ width:70px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="app-title">时间轴<small>TimeLine</small></div>
+    <div class="header-actions">
+      <button class="icon-btn" id="exportBtn" title="导出数据">导出</button>
+      <button class="icon-btn" id="importBtn" title="导入数据">导入</button>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner">
+    <button class="tab active" data-view="record">✏️ 记录</button>
+    <button class="tab" data-view="week">📅 周视图</button>
+    <button class="tab" data-view="stats">📊 统计</button>
+  </div>
+</nav>
+
+<main>
+  <!-- 页面1：快速记录 -->
+  <section id="view-record">
+    <div class="card">
+      <div class="row nav-row">
+        <button class="nav-btn" id="recPrev">◀</button>
+        <input type="date" id="recDate">
+        <button class="nav-btn" id="recNext">▶</button>
+      </div>
+
+      <div class="block-title">时间段（精确到10分钟）</div>
+      <div class="row time-row" style="justify-content:flex-start">
+        <div><label>开始</label><select id="recStart"></select></div>
+        <div style="font-size:18px;color:var(--muted);padding-top:16px">→</div>
+        <div><label>结束</label><select id="recEnd"></select></div>
+      </div>
+
+      <div class="block-title">主行为</div>
+      <div class="chips" id="mainChips"></div>
+      <div class="custom-row">
+        <input id="newBehavior" placeholder="自定义行为名称，如：外刊精读" maxlength="10">
+        <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
+      </div>
+
+      <div class="block-title">副行为（可选 · 与主行为同时进行，统计时各计一半）</div>
+      <div class="chips" id="subChips"></div>
+
+      <div class="row actions">
+        <button class="primary" id="markBtn">标记时间段</button>
+        <button class="ghost" id="clearRangeBtn">清除该时间段</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="block-title">😴 睡眠快捷填充（自动跨天计算）</div>
+      <div class="row time-row" style="justify-content:flex-start">
+        <div><label>入睡时间（前一晚20:00–次日05:00）</label><select id="bedSel"></select></div>
+        <div style="font-size:18px;color:var(--muted);padding-top:16px">→</div>
+        <div><label>起床时间（今天）</label><select id="wakeSel"></select></div>
+      </div>
+      <div class="empty-tip" style="text-align:left" id="sleepHint"></div>
+      <div class="row actions">
+        <button class="primary" id="sleepFillBtn">自动填充睡眠</button>
+        <button class="ghost" id="sleepClearBtn">清除本次睡眠</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="block-title">当日概览（00–24时）</div>
+      <div class="day-strip" id="dayStrip"></div>
+      <div class="strip-scale"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+      <div class="block-title">已记录时段</div>
+      <div id="rangeList"></div>
+    </div>
+  </section>
+
+  <!-- 页面2：周视图 -->
+  <section id="view-week" hidden>
+    <div class="card">
+      <div class="row nav-row">
+        <button class="nav-btn" id="wkPrev">◀</button>
+        <div class="nav-label" id="wkLabel"></div>
+        <button class="nav-btn" id="wkNext">▶</button>
+        <button class="ghost" id="wkThis" style="padding:6px 14px">本周</button>
+        <button class="ghost" id="wkExport" style="padding:6px 14px">📷 导出图片</button>
+      </div>
+    </div>
+    <div class="card week-scroll">
+      <div class="week-grid" id="weekGrid"></div>
+    </div>
+    <div class="card">
+      <div class="legend" id="weekLegend"></div>
+    </div>
+  </section>
+
+  <!-- 页面3：统计 -->
+  <section id="view-stats" hidden>
+    <div class="card">
+      <div class="seg" id="statsSeg">
+        <button data-mode="day" class="active">当天</button>
+        <button data-mode="week">当周</button>
+        <button data-mode="month">当月</button>
+      </div>
+      <div class="row nav-row">
+        <button class="nav-btn" id="stPrev">◀</button>
+        <div class="nav-label" id="stLabel"></div>
+        <button class="nav-btn" id="stNext">▶</button>
+        <button class="ghost" id="stToday" style="padding:6px 14px">回到今天</button>
+      </div>
+      <div class="row sleep-row">
+        <label><input type="checkbox" id="sleepToggle" checked> 显示睡眠时间</label>
+      </div>
+      <div class="chart-wrap"><canvas id="pieCanvas"></canvas></div>
+      <div id="statsLegend"></div>
+    </div>
+  </section>
+</main>
+
+<input type="file" id="importFile" hidden accept=".json">
+
+<script>
+(function(){
+"use strict";
+const KEY = "timeline-app-v1";
+const SLOTS = 144; // 24h * 6 (10min)
+const PRESETS = [
+  /* 学习类 · 暖色系 */
+  {id:"class",     name:"上课",     color:"#E8875B"},
+  {id:"homework",  name:"作业",     color:"#F2B950"},
+  {id:"interpret", name:"口译练习", color:"#E06D6D"},
+  {id:"read",      name:"看书",     color:"#EB8FA0"},
+  /* 工作类 · 冷色系 */
+  {id:"intern",    name:"实习",     color:"#5B8DB8"},
+  {id:"commute",   name:"通勤",     color:"#7FA8D9"},
+  /* 日常生活 · 青绿色系 */
+  {id:"sleep",     name:"睡觉",     color:"#82B8A6"},
+  {id:"shower",    name:"洗澡",     color:"#A3CFC0"},
+  {id:"meal",      name:"吃饭",     color:"#9DC08B"},
+  /* 运动 · 独立色 */
+  {id:"sport",     name:"运动",     color:"#B8A7D9"}
+];
+const PALETTE = ["#B8B5FF","#F7CE68","#7FD8D8","#E3A5C7","#9ED2C6","#F49FBC",
+                 "#A0C8F0","#FFD6A5","#C8E6A0","#F5A97F","#D0A9F5","#8FC93A",
+                 "#F2A65A","#86C7F0"];
+const WD = ["周日","周一","周二","周三","周四","周五","周六"];
+const $ = id => document.getElementById(id);
+
+/* ---------- 存储 ---------- */
+let store;
+function loadStore(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){ store = JSON.parse(raw); if(!store.behaviors || !store.days) throw 0; migrate(); return; }
+  }catch(e){}
+  store = { behaviors: PRESETS.slice(), days:{} };
+}
+/* 将旧数据迁移到分组配色：按名称更新默认行为颜色并补齐新增项（保留原id，历史记录不受影响），自定义行为排在后面 */
+function migrate(){
+  const customs = store.behaviors.filter(b=>!PRESETS.some(p=>p.name===b.name));
+  const kept = PRESETS.map(p=>{
+    const old = store.behaviors.find(b=>b.name===p.name);
+    return old ? {id:old.id, name:p.name, color:p.color} : p;
+  });
+  store.behaviors = kept.concat(customs);
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
+function saveStore(){ save(); renderAll(); }
+
+/* ---------- 日期工具 ---------- */
+const pad = n => String(n).padStart(2,"0");
+const fmtDate = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+function parseISO(s){ return new Date(s+"T00:00:00"); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function mondayOf(d){ const x=new Date(d); const w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); return x; }
+const todayStr = () => fmtDate(new Date());
+
+/* ---------- 时间工具 ---------- */
+function slotLabel(i){
+  if(i>=SLOTS) return "24:00";
+  return pad(Math.floor(i/6))+":"+pad((i%6)*10);
+}
+function behaviorOf(id){ return store.behaviors.find(b=>b.id===id); }
+function colorOf(id){ const b=behaviorOf(id); return b?b.color:"#C6CBDB"; }
+function nameOf(id){ const b=behaviorOf(id); return b?b.name:"(已删除)"; }
+function isSleep(id){ const b=behaviorOf(id); return !!b && b.name==="睡觉"; }
+
+/* ---------- 状态 ---------- */
+let view="record";
+let recDate = todayStr();
+let selMain=null, selSub=null;
+let weekMonday = fmtDate(mondayOf(new Date()));
+let statsDate = todayStr(), statsMode="day", showSleep=true;
+
+/* ---------- 记录数据读写 ---------- */
+function slotsOfDay(ds){ return (store.days[ds]&&store.days[ds].slots)||{}; }
+function markRange(ds,s,e,ids){
+  if(!store.days[ds]) store.days[ds]={slots:{}};
+  const sl=store.days[ds].slots;
+  for(let i=s;i<e;i++){ if(ids.length) sl[i]=ids.slice(); else delete sl[i]; }
+  if(!Object.keys(sl).length) delete store.days[ds];
+}
+function rangesOfDay(ds){
+  const slots=slotsOfDay(ds);
+  const keys=Object.keys(slots).map(Number).sort((a,b)=>a-b);
+  const out=[];
+  for(const k of keys){
+    const v=slots[k], sig=v.join("|");
+    const last=out[out.length-1];
+    if(last && last.sig===sig && last.end===k){ last.end=k+1; }
+    else out.push({sig, ids:v.slice(), start:k, end:k+1});
+  }
+  return out;
+}
+
+/* ---------- Tab 切换 ---------- */
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    view=btn.dataset.view;
+    document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b===btn));
+    $("view-record").hidden = view!=="record";
+    $("view-week").hidden  = view!=="week";
+    $("view-stats").hidden = view!=="stats";
+    if(view==="week") renderWeek();
+    if(view==="stats") renderStats();
+    if(view==="record") renderRecord();
+  });
+});
+
+/* ---------- 页面1：记录 ---------- */
+function buildTimeSelects(){
+  const s=$("recStart"), e=$("recEnd");
+  s.innerHTML=""; e.innerHTML="";
+  for(let i=0;i<SLOTS;i++) s.add(new Option(slotLabel(i),i));
+  for(let i=1;i<=SLOTS;i++) e.add(new Option(slotLabel(i),i));
+  const now=new Date();
+  const cur=Math.floor((now.getHours()*60+now.getMinutes())/10);
+  s.value=Math.max(0,Math.min(cur,SLOTS-1));
+  updateEndOptions();
+  /* 选择开始时间后：结束时间自动跳到开始+10分钟，且结束下拉只显示晚于开始的选项 */
+  s.addEventListener("change",updateEndOptions);
+  const bed=$("bedSel"), wake=$("wakeSel");
+  bed.innerHTML=""; wake.innerHTML="";
+  /* 入睡时间可选：前一晚 20:00 – 次日 05:00（"y"=昨天时段，"t"=今天凌晨时段） */
+  for(let i=120;i<SLOTS;i++) bed.add(new Option("昨天 "+slotLabel(i), "y"+i));
+  for(let i=0;i<30;i++)     bed.add(new Option("今天 "+slotLabel(i), "t"+i));
+  for(let i=1;i<=SLOTS;i++) wake.add(new Option(slotLabel(i),i));
+  bed.value="y138"; // 默认 昨晚 23:00 入睡
+  wake.value=42;    // 默认 今天 07:00 起床
+  [bed,wake].forEach(el=>el.addEventListener("change",updateSleepHint));
+}
+/* 根据开始时间刷新结束下拉：只显示 start+1 之后的选项，并默认选中 start+1（+10分钟） */
+function updateEndOptions(){
+  const s=$("recStart"), e=$("recEnd");
+  const sv=+s.value;
+  /* 只显示晚于开始时间的选项 */
+  for(let i=1;i<=SLOTS;i++) e.options[i-1].hidden = (i<=sv);
+  /* 开始时间变化后，结束时间始终重置为 开始+10分钟（23:50 开始时只能选 24:00） */
+  e.value = Math.min(sv+1, SLOTS);
+}
+
+function chipEl(b,selected,onClick,deletable){
+  const c=document.createElement("span");
+  c.className="chip"+(selected?" selected":"");
+  c.style.setProperty("--c",b.color);
+  const t=document.createElement("span"); t.textContent=b.name; c.appendChild(t);
+  if(deletable){
+    const d=document.createElement("i"); d.className="del"; d.textContent="×"; d.title="删除该常用行为";
+    d.addEventListener("click",ev=>{ ev.stopPropagation(); deleteBehavior(b.id); });
+    c.appendChild(d);
+  }
+  c.addEventListener("click",onClick);
+  return c;
+}
+
+function renderChips(){
+  const mc=$("mainChips"); mc.innerHTML="";
+  store.behaviors.forEach(b=>{
+    mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, true));
+  });
+  if(!store.behaviors.length){
+    const tip=document.createElement("span"); tip.className="empty-tip"; tip.textContent="暂无常用行为，请在下方添加"; mc.appendChild(tip);
+  }
+  const sc=$("subChips"); sc.innerHTML="";
+  const none={id:null,name:"无",color:"#C6CBDB"};
+  sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
+  store.behaviors.forEach(b=>{
+    sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
+  });
+}
+
+function deleteBehavior(id){
+  if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
+  store.behaviors=store.behaviors.filter(b=>b.id!==id);
+  if(selMain===id) selMain=null;
+  if(selSub===id) selSub=null;
+  saveStore();
+}
+
+$("addBehavior").addEventListener("click",()=>{
+  const v=$("newBehavior").value.trim();
+  if(!v){ alert("请输入行为名称"); return; }
+  if(store.behaviors.some(b=>b.name===v)){ alert("已存在同名行为"); return; }
+  store.behaviors.push({id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]});
+  $("newBehavior").value="";
+  saveStore();
+});
+$("newBehavior").addEventListener("keydown",e=>{ if(e.key==="Enter") $("addBehavior").click(); });
+
+function mark(doClear){
+  const s=+$("recStart").value, e=+$("recEnd").value;
+  if(e<=s){ alert("结束时间需晚于开始时间"); return; }
+  if(!doClear && !selMain){ alert("请先选择一个主行为（也可在上方输入框自定义）"); return; }
+  const slots=slotsOfDay(recDate);
+  let occupied=false;
+  for(let i=s;i<e;i++) if(slots[i]){ occupied=true; break; }
+  if(doClear){ if(!occupied){ return; } if(!confirm("确定清除 "+recDate+" "+slotLabel(s)+"–"+slotLabel(e)+" 的记录？")) return; }
+  else if(occupied && !confirm("该时间段已有记录，是否覆盖？")) return;
+  markRange(recDate,s,e, doClear?[]:[selMain, selSub].filter(Boolean));
+  saveStore();
+}
+$("markBtn").addEventListener("click",()=>mark(false));
+$("clearRangeBtn").addEventListener("click",()=>mark(true));
+
+$("recDate").addEventListener("change",e=>{ recDate=e.target.value||todayStr(); renderRecord(); });
+$("recPrev").addEventListener("click",()=>{ recDate=fmtDate(addDays(parseISO(recDate),-1)); renderRecord(); });
+$("recNext").addEventListener("click",()=>{ recDate=fmtDate(addDays(parseISO(recDate),1)); renderRecord(); });
+
+/* ---------- 睡眠快捷填充 ---------- */
+function sleepBehaviorId(){
+  const b=store.behaviors.find(x=>x.name==="睡觉");
+  return b?b.id:null;
+}
+/* 计算睡眠涉及的区间：入睡时段带日期前缀（y=前一晚，t=今天凌晨），起床为今天 */
+function sleepSpans(){
+  const bedV=$("bedSel").value, w=+$("wakeSel").value;
+  const prev=fmtDate(addDays(parseISO(recDate),-1));
+  if(bedV[0]==="y"){
+    const s=+bedV.slice(1);
+    const spans=[[prev, s, SLOTS]];
+    if(w>0) spans.push([recDate, 0, w]);
+    return spans;
+  }else{
+    const s=+bedV.slice(1);
+    if(s>=w) return null; // 入睡不早于起床，无效
+    return [[recDate, s, w]];
+  }
+}
+function sleepDuration(spans){
+  return spans.reduce((sum,[ds,a,b])=>sum+(b-a)*10, 0);
+}
+function updateSleepHint(){
+  const hint=$("sleepHint"), spans=sleepSpans();
+  if(!spans){ hint.textContent="起床时间需晚于入睡时间"; return; }
+  const min=sleepDuration(spans);
+  const h=Math.floor(min/60), m=min%60;
+  const segs=spans.map(([ds,a,b])=>{
+    const isToday=ds===recDate;
+    return (isToday?"今天":"昨天")+slotLabel(a)+"–"+slotLabel(b);
+  }).join(" ＋ ");
+  hint.textContent="本次睡眠 "+h+"小时"+(m?m+"分钟":"")+"："+segs;
+}
+/* 从已有记录回填入睡/起床时间（入睡仅识别 20:00–次日05:00 范围内的记录） */
+function detectSleep(){
+  const sid=sleepBehaviorId(); if(!sid) return;
+  const sleepRs=rangesOfDay(recDate).filter(r=>r.ids.includes(sid));
+  const wakeR=sleepRs.find(r=>r.start===0) || sleepRs.find(r=>r.start<30);
+  if(wakeR) $("wakeSel").value=Math.min(SLOTS,wakeR.end);
+  const prev=fmtDate(addDays(parseISO(recDate),-1));
+  const todayBed=sleepRs.find(r=>r.start>0 && r.start<30); // 今天凌晨 00:10–04:50 入睡
+  if(todayBed) $("bedSel").value="t"+todayBed.start;
+  else{
+    const bedR=rangesOfDay(prev).filter(r=>r.ids.includes(sid)).pop();
+    if(bedR && bedR.end===SLOTS && bedR.start>=120) $("bedSel").value="y"+bedR.start;
+  }
+  updateSleepHint();
+}
+function fillSleep(clear){
+  const sid=sleepBehaviorId();
+  if(!sid){ alert("未找到「睡觉」行为，请先在常用行为中添加"); return; }
+  const spans=sleepSpans();
+  if(!spans){ alert("入睡和起床时间不能相同"); return; }
+  let occupied=false;
+  spans.forEach(([ds,a,b])=>{
+    const sl=slotsOfDay(ds);
+    for(let i=a;i<b;i++) if(sl[i]){ occupied=true; break; }
+  });
+  if(occupied && !confirm("睡眠时间段内已有记录，是否覆盖？")) return;
+  spans.forEach(([ds,a,b])=>markRange(ds,a,b, clear?[]:[sid]));
+  saveStore();
+}
+$("sleepFillBtn").addEventListener("click",()=>fillSleep(false));
+$("sleepClearBtn").addEventListener("click",()=>fillSleep(true));
+
+function slotStyle(ids){
+  if(!ids||!ids.length) return "";
+  if(ids.length===1) return "background:"+colorOf(ids[0]);
+  return "background:linear-gradient(135deg,"+colorOf(ids[0])+" 50%,"+colorOf(ids[1])+" 50%)";
+}
+
+function renderRecord(){
+  $("recDate").value=recDate;
+  renderChips();
+  detectSleep();
+  // 当日概览条
+  const strip=$("dayStrip"); strip.innerHTML="";
+  const slots=slotsOfDay(recDate);
+  for(let i=0;i<SLOTS;i++){
+    const el=document.createElement("i");
+    const st=slotStyle(slots[i]);
+    if(st) el.setAttribute("style",st);
+    strip.appendChild(el);
+  }
+  // 已记录时段
+  const list=$("rangeList"); list.innerHTML="";
+  const rs=rangesOfDay(recDate);
+  if(!rs.length){ list.innerHTML='<div class="empty-tip">今天还没有记录，去标记第一个时间段吧～</div>'; return; }
+  rs.forEach(r=>{
+    const row=document.createElement("div"); row.className="range-row";
+    const t=document.createElement("span"); t.className="range-time";
+    t.textContent=slotLabel(r.start)+"–"+slotLabel(r.end);
+    const nm=document.createElement("span"); nm.className="range-name";
+    r.ids.forEach(id=>{
+      const w=document.createElement("span"); w.style.display="inline-flex"; w.style.alignItems="center"; w.style.gap="5px";
+      const d=document.createElement("i"); d.className="dot"; d.style.background=colorOf(id);
+      const n=document.createElement("span"); n.textContent=nameOf(id);
+      if(!behaviorOf(id)) n.style.color="#C3C8D8";
+      w.appendChild(d); w.appendChild(n); nm.appendChild(w);
+      if(r.ids.length>1 && id===r.ids[0]){ const plus=document.createElement("span"); plus.textContent="＋"; plus.style.color="#C3C8D8"; nm.appendChild(plus); }
+    });
+    const del=document.createElement("button"); del.className="range-del"; del.textContent="✕"; del.title="删除该时段";
+    del.addEventListener("click",()=>{ if(confirm("删除 "+slotLabel(r.start)+"–"+slotLabel(r.end)+" 的记录？")){ markRange(recDate,r.start,r.end,[]); saveStore(); } });
+    row.appendChild(t); row.appendChild(nm); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+/* ---------- 页面2：周视图 ---------- */
+$("wkPrev").addEventListener("click",()=>{ weekMonday=fmtDate(addDays(parseISO(weekMonday),-7)); renderWeek(); });
+$("wkNext").addEventListener("click",()=>{ weekMonday=fmtDate(addDays(parseISO(weekMonday),7)); renderWeek(); });
+$("wkThis").addEventListener("click",()=>{ weekMonday=fmtDate(mondayOf(new Date())); renderWeek(); });
+$("wkExport").addEventListener("click",exportWeekImage);
+
+/* 用 Canvas 重绘周视图并导出为 JPG */
+function exportWeekImage(){
+  const mon=parseISO(weekMonday);
+  const P=24;               // 外边距
+  const HOUR_W=34;          // 小时列宽
+  const DAY_W=104;          // 每天列宽
+  const SLOT_H=4.4;         // 每10分钟格高
+  const HEAD_H=42;          // 日期表头高
+  const LEGEND_H=64;        // 底部图例高
+  const TITLE_H=52;         // 标题区高
+  const W=P*2+HOUR_W+7*DAY_W;
+  const H=TITLE_H+HEAD_H+SLOTS*SLOT_H+LEGEND_H;
+  const cv=document.createElement("canvas");
+  const dpr=2;
+  cv.width=W*dpr; cv.height=H*dpr;
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
+  const gridX=P+HOUR_W, gridY=TITLE_H+HEAD_H;
+
+  /* 标题 */
+  ctx.fillStyle="#3B4256"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.font="bold 19px 'Microsoft YaHei'";
+  const sun=addDays(mon,6);
+  ctx.fillText("时间轴 · 周视图", W/2, P+12);
+  ctx.font="13px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  ctx.fillText((mon.getMonth()+1)+"月"+mon.getDate()+"日 – "+(sun.getMonth()+1)+"月"+sun.getDate()+"日", W/2, P+34);
+
+  /* 小时刻度 */
+  ctx.textAlign="right"; ctx.font="10px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  for(let h=0;h<24;h+=2){
+    ctx.fillText(pad(h)+":00", P+HOUR_W-4, gridY+h*6*SLOT_H+SLOT_H*3);
+  }
+  /* 空白底格 + 日期表头 */
+  const today=todayStr();
+  ctx.textAlign="center";
+  for(let d=0;d<7;d++){
+    const dayDate=addDays(mon,d), date=fmtDate(dayDate);
+    const x=gridX+d*DAY_W;
+    ctx.font=(date===today?"bold 13px":"'13px'")+" 'Microsoft YaHei'";
+    ctx.fillStyle=date===today?"#6C7BD9":"#3B4256";
+    ctx.fillText((dayDate.getMonth()+1)+"/"+dayDate.getDate(), x+DAY_W/2, TITLE_H+10);
+    ctx.font="11px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+    ctx.fillText(WD[dayDate.getDay()], x+DAY_W/2, TITLE_H+27);
+    ctx.fillStyle="#EFF1F6"; ctx.fillRect(x+1, gridY, DAY_W-2, SLOTS*SLOT_H);
+  }
+  /* 时段色块 + 名称标注（≥30分钟才标注） */
+  ctx.textBaseline="middle";
+  for(let d=0;d<7;d++){
+    const date=fmtDate(addDays(mon,d));
+    const x=gridX+d*DAY_W;
+    rangesOfDay(date).forEach(rng=>{
+      const y=gridY+rng.start*SLOT_H, hpx=(rng.end-rng.start)*SLOT_H;
+      const c1=colorOf(rng.ids[0]);
+      if(rng.ids.length===1){
+        ctx.fillStyle=c1; ctx.fillRect(x+1,y,DAY_W-2,hpx);
+      }else{
+        const c2=colorOf(rng.ids[1]);
+        const g=ctx.createLinearGradient(x,y,x+DAY_W,y+hpx);
+        g.addColorStop(0,c1); g.addColorStop(.5,c1); g.addColorStop(.5,c2); g.addColorStop(1,c2);
+        ctx.fillStyle=g; ctx.fillRect(x+1,y,DAY_W-2,hpx);
+      }
+      if(rng.end-rng.start>=3 && hpx>=14){
+        ctx.fillStyle="#FFFFFF"; ctx.font="10px 'Microsoft YaHei'";
+        ctx.fillText(rng.ids.map(nameOf).join("＋"), x+DAY_W/2, y+hpx/2);
+      }
+    });
+  }
+  /* 网格边框 */
+  ctx.strokeStyle="#E7E9F2"; ctx.lineWidth=1;
+  ctx.strokeRect(gridX+.5, gridY+.5, 7*DAY_W-1, SLOTS*SLOT_H-1);
+  for(let d=1;d<7;d++){ ctx.beginPath(); ctx.moveTo(gridX+d*DAY_W+.5,gridY); ctx.lineTo(gridX+d*DAY_W+.5,gridY+SLOTS*SLOT_H); ctx.stroke(); }
+  /* 图例 */
+  const lgY=gridY+SLOTS*SLOT_H+22;
+  let lx=P, ly=lgY;
+  ctx.font="12px 'Microsoft YaHei'"; ctx.textAlign="left";
+  store.behaviors.forEach(b=>{
+    ctx.fillStyle=b.color; ctx.fillRect(lx,ly-5,12,12);
+    ctx.fillStyle="#3B4256"; ctx.fillText(b.name, lx+17, ly+1);
+    lx+=17+ctx.measureText(b.name).width+18;
+    if(lx>W-110){ lx=P; ly+=24; }
+  });
+  /* 导出下载 */
+  const a=document.createElement("a");
+  a.href=cv.toDataURL("image/jpeg",0.92);
+  a.download="时间轴_周视图_"+(mon.getMonth()+1)+"-"+mon.getDate()+"_至_"+(sun.getMonth()+1)+"-"+sun.getDate()+".jpg";
+  a.click();
+}
+
+function renderWeek(){
+  const mon=parseISO(weekMonday);
+  const sun=addDays(mon,6);
+  $("wkLabel").textContent=(mon.getMonth()+1)+"月"+mon.getDate()+"日 – "+(sun.getMonth()+1)+"月"+sun.getDate()+"日";
+  const grid=$("weekGrid"); grid.innerHTML="";
+  // 小时列
+  const hc=document.createElement("div"); hc.className="hour-col";
+  const headSpacer=document.createElement("div"); headSpacer.style.height="34px"; hc.appendChild(headSpacer);
+  for(let h=0;h<24;h++){
+    const m=document.createElement("div"); m.className="hour-mark";
+    if(h%2===0) m.textContent=pad(h);
+    hc.appendChild(m);
+  }
+  grid.appendChild(hc);
+  const today=todayStr();
+  for(let d=0;d<7;d++){
+    const dayDate=addDays(mon,d);
+    const date=fmtDate(dayDate);
+    const col=document.createElement("div"); col.className="day-col";
+    const head=document.createElement("div"); head.className="day-head"+(date===today?" today":"");
+    head.innerHTML="<b>"+(dayDate.getMonth()+1)+"/"+dayDate.getDate()+"</b>"+WD[dayDate.getDay()];
+    col.appendChild(head);
+    const body=document.createElement("div"); body.className="day-slots";
+    const slots=slotsOfDay(date);
+    for(let i=0;i<SLOTS;i++){
+      const el=document.createElement("div"); el.className="wslot";
+      const ids=slots[i];
+      const st=slotStyle(ids);
+      if(st) el.setAttribute("style",st+";");
+      if(ids) el.title=slotLabel(i)+" "+ids.map(nameOf).join(" ＋ ");
+      el.addEventListener("click",()=>{
+        recDate=date; $("recStart").value=i; updateEndOptions();
+        document.querySelector('.tab[data-view="record"]').click();
+        window.scrollTo({top:0,behavior:"smooth"});
+      });
+      body.appendChild(el);
+    }
+    // 色块内直接标注行为名称（时段过短则不标，保证美观）
+    rangesOfDay(date).forEach(rng=>{
+      if(rng.end-rng.start<3) return; // <30分钟不标
+      const lab=document.createElement("span");
+      lab.className="wlabel";
+      lab.style.top="calc(var(--slot) * "+rng.start+")";
+      lab.style.height="calc(var(--slot) * "+(rng.end-rng.start)+")";
+      lab.textContent=rng.ids.map(nameOf).join("＋");
+      body.appendChild(lab);
+    });
+    col.appendChild(body);
+    grid.appendChild(col);
+  }
+  // 图例
+  const lg=$("weekLegend"); lg.innerHTML="";
+  store.behaviors.forEach(b=>{
+    const s=document.createElement("span");
+    const d=document.createElement("i"); d.className="dot"; d.style.background=b.color;
+    s.appendChild(d); s.appendChild(document.createTextNode(b.name));
+    lg.appendChild(s);
+  });
+}
+
+/* ---------- 页面3：统计 ---------- */
+$("statsSeg").querySelectorAll("button").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    statsMode=btn.dataset.mode;
+    $("statsSeg").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b===btn));
+    renderStats();
+  });
+});
+$("sleepToggle").addEventListener("change",e=>{ showSleep=e.target.checked; renderStats(); });
+$("stPrev").addEventListener("click",()=>{ shiftStats(-1); });
+$("stNext").addEventListener("click",()=>{ shiftStats(1); });
+$("stToday").addEventListener("click",()=>{ statsDate=todayStr(); renderStats(); });
+
+function shiftStats(n){
+  const d=parseISO(statsDate);
+  if(statsMode==="day") statsDate=fmtDate(addDays(d,n));
+  else if(statsMode==="week") statsDate=fmtDate(addDays(d,7*n));
+  else statsDate=fmtDate(new Date(d.getFullYear(), d.getMonth()+n, 1));
+  renderStats();
+}
+function statsDates(){
+  const d=parseISO(statsDate);
+  if(statsMode==="day") return [statsDate];
+  if(statsMode==="week"){
+    const mon=mondayOf(d); const out=[];
+    for(let i=0;i<7;i++) out.push(fmtDate(addDays(mon,i)));
+    return out;
+  }
+  const out=[]; const m=new Date(d.getFullYear(),d.getMonth(),1);
+  while(m.getMonth()===d.getMonth()){ out.push(fmtDate(m)); m.setDate(m.getDate()+1); }
+  return out;
+}
+function statsLabel(dates){
+  const d=parseISO(statsDate);
+  if(statsMode==="day") return (d.getMonth()+1)+"月"+d.getDate()+"日 "+WD[d.getDay()];
+  if(statsMode==="week"){ const a=parseISO(dates[0]), b=parseISO(dates[6]);
+    return (a.getMonth()+1)+"/"+a.getDate()+" – "+(b.getMonth()+1)+"/"+b.getDate(); }
+  return d.getFullYear()+"年"+(d.getMonth()+1)+"月";
+}
+
+function totals(dates){
+  const t={};
+  dates.forEach(ds=>{
+    const slots=slotsOfDay(ds);
+    for(const k in slots){
+      const ids=slots[k].filter(id=>behaviorOf(id));
+      if(!ids.length) continue;
+      const share=ids.length>1?5:10;
+      ids.forEach(id=>{ t[id]=(t[id]||0)+share; });
+    }
+  });
+  return t;
+}
+
+function renderStats(){
+  const dates=statsDates();
+  $("stLabel").textContent=statsLabel(dates);
+  let t=totals(dates);
+  let items=Object.keys(t).map(id=>({id,name:nameOf(id),color:colorOf(id),value:t[id]}));
+  if(!showSleep) items=items.filter(it=>!isSleep(it.id));
+  items.sort((a,b)=>b.value-a.value);
+  const total=items.reduce((s,it)=>s+it.value,0);
+  drawDonut(items,total);
+  // 图例
+  const lg=$("statsLegend"); lg.innerHTML="";
+  if(!items.length){ lg.innerHTML='<div class="empty-tip">该时间段内暂无记录</div>'; return; }
+  const max=items[0].value;
+  items.forEach(it=>{
+    const row=document.createElement("div"); row.className="stat-row";
+    const nm=document.createElement("span"); nm.className="stat-name";
+    const d=document.createElement("i"); d.className="dot"; d.style.background=it.color;
+    nm.appendChild(d); nm.appendChild(document.createTextNode(it.name));
+    const bar=document.createElement("span"); bar.className="stat-bar";
+    const bi=document.createElement("i"); bi.style.width=(max?it.value/max*100:0)+"%"; bi.style.background=it.color;
+    bar.appendChild(bi);
+    const val=document.createElement("span"); val.className="stat-val";
+    val.textContent=(it.value/60).toFixed(1)+"小时 · "+(total?(it.value/total*100).toFixed(1):0)+"%";
+    row.appendChild(nm); row.appendChild(bar); row.appendChild(val);
+    lg.appendChild(row);
+  });
+}
+
+function drawDonut(items,total){
+  const canvas=$("pieCanvas");
+  const dpr=window.devicePixelRatio||1;
+  const wrapW=canvas.parentElement?canvas.parentElement.clientWidth:320;
+  const size=Math.min(Math.max(wrapW,300),380);
+  const margin=Math.min(100,Math.max(72,size*0.3)); // 为折线标注留白
+  canvas.width=size*dpr; canvas.height=size*dpr;
+  canvas.style.width=size+"px"; canvas.style.height=size+"px";
+  const ctx=canvas.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,size,size);
+  const cx=size/2, cy=size/2, R=size/2-margin, r=R*0.62;
+  if(!items.length||!total){
+    ctx.beginPath(); ctx.arc(cx,cy,(R+r)/2,0,Math.PI*2);
+    ctx.strokeStyle="#EFF1F6"; ctx.lineWidth=R-r; ctx.stroke();
+    ctx.fillStyle="#8A91A8"; ctx.font="14px 'Microsoft YaHei'";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("暂无记录",cx,cy);
+    return;
+  }
+  const MIN_PCT=0.04; // 占比<4%的色段不标注
+  let ang=-Math.PI/2;
+  const labels=[];
+  items.forEach(it=>{
+    const a=it.value/total*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(ang)*r, cy+Math.sin(ang)*r);
+    ctx.arc(cx,cy,R,ang,ang+a);
+    ctx.arc(cx,cy,r,ang+a,ang,true);
+    ctx.closePath(); ctx.fillStyle=it.color; ctx.fill();
+    if(it.value/total>=MIN_PCT){
+      labels.push({it, mid:ang+a/2, side:Math.cos(ang+a/2)>=0?1:-1,
+                   y:cy+Math.sin(ang+a/2)*(R+14)});
+    }
+    ang+=a;
+  });
+  // 同侧标签防重叠：自上而下最小间隔16px
+  [-1,1].forEach(side=>{
+    const arr=labels.filter(l=>l.side===side).sort((a,b)=>a.y-b.y);
+    for(let i=1;i<arr.length;i++){
+      if(arr[i].y<arr[i-1].y+16) arr[i].y=arr[i-1].y+16;
+    }
+  });
+  ctx.font="12px 'Microsoft YaHei'"; ctx.textBaseline="middle";
+  labels.forEach(l=>{
+    const x1=cx+Math.cos(l.mid)*(R+3), y1=cy+Math.sin(l.mid)*(R+3);
+    const x2=cx+l.side*(R+12);
+    const x3=cx+l.side*(R+20);
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,l.y); ctx.lineTo(x3,l.y);
+    ctx.strokeStyle="#B9BFD3"; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle="#3B4256"; ctx.textAlign=l.side===1?"left":"right";
+    const pct=(l.it.value/total*100).toFixed(1)+"%";
+    ctx.fillText(l.it.name+" "+pct, x3+l.side*4, l.y);
+  });
+  ctx.fillStyle="#3B4256"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.font=(R>70?"bold 22px":"bold 17px")+" 'Microsoft YaHei'";
+  ctx.fillText((total/60).toFixed(1)+"h",cx,cy-8);
+  ctx.font="12px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  ctx.fillText("已记录时长",cx,cy+14);
+}
+
+/* ---------- 导出 / 导入 ---------- */
+$("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(store)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="时间轴数据_"+todayStr()+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const data=JSON.parse(rd.result);
+      if(!data.behaviors||!data.days) throw 0;
+      if(!confirm("导入将覆盖当前设备上的全部数据，确定继续？")) return;
+      store=data; saveStore();
+      alert("导入成功！");
+    }catch(err){ alert("文件格式不正确，导入失败"); }
+  };
+  rd.readAsText(f,"utf-8");
+  e.target.value="";
+});
+
+/* ---------- 初始化 ---------- */
+function renderAll(){
+  if(view==="record") renderRecord();
+  if(view==="week") renderWeek();
+  if(view==="stats") renderStats();
+}
+window.addEventListener("resize",()=>{ if(view==="stats") renderStats(); });
+
+loadStore();
+buildTimeSelects();
+renderRecord();
+})();
+</script>
+</body>
+</html>
