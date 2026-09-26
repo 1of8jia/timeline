@@ -162,6 +162,60 @@
   .chip.temp{ border-style:dashed; background:#FBFCFF; }
   .chip.temp.selected{ border-style:solid; }
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
+  .chip .pal{ font-style:normal; font-size:11px; opacity:.65; }
+  .chip .pal:hover{ opacity:1; }
+
+  /* 取色器（无透明度） */
+  .pick-mask{
+    position:fixed; inset:0; z-index:70; background:rgba(30,34,52,.45);
+    display:flex; align-items:center; justify-content:center; padding:18px;
+  }
+  .pick-panel{
+    width:100%; max-width:320px; background:#fff; border-radius:16px; padding:16px;
+    box-shadow:0 16px 44px rgba(30,36,60,.28);
+  }
+  .pick-title{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:14px; font-weight:700; margin-bottom:12px;
+  }
+  .sv{
+    position:relative; height:172px; border-radius:10px; overflow:hidden; cursor:crosshair;
+    touch-action:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
+  }
+  .sv > i{ position:absolute; inset:0; display:block; }
+  .sv-hue{ background:hsl(0,100%,50%); }
+  .sv-white{ background:linear-gradient(to right,#fff,rgba(255,255,255,0)); }
+  .sv-black{ background:linear-gradient(to top,#000,rgba(0,0,0,0)); }
+  .sv-cursor{
+    position:absolute; width:15px; height:15px; border-radius:50%;
+    border:2.5px solid #fff; box-shadow:0 0 4px rgba(0,0,0,.45);
+    transform:translate(-50%,-50%); pointer-events:none;
+  }
+  .hue{
+    position:relative; height:14px; border-radius:7px; margin-top:14px;
+    cursor:pointer; touch-action:none;
+    background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);
+  }
+  .hue-knob{
+    position:absolute; top:50%; width:16px; height:16px; border-radius:50%; background:#fff;
+    box-shadow:0 0 0 1px rgba(0,0,0,.15), 0 1px 4px rgba(0,0,0,.35);
+    transform:translate(-50%,-50%); pointer-events:none;
+  }
+  .pick-row{ display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .pick-prev{ width:38px; height:38px; border-radius:10px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.08); }
+  .pick-hex{ display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
+  .pick-hex label{ font-size:12px; color:var(--muted); font-weight:700; }
+  .pick-hex input{
+    flex:1; min-width:0; font-family:inherit; font-size:13px; letter-spacing:.5px;
+    border:1px solid var(--border); border-radius:9px; padding:8px 10px; text-transform:uppercase;
+  }
+  .pick-hex input:focus{ outline:none; border-color:var(--accent); }
+  .pick-actions{ display:flex; gap:10px; margin-top:16px; }
+  .pick-actions button{
+    flex:1; padding:10px 0; border-radius:10px; font-family:inherit; font-size:14px; cursor:pointer;
+  }
+  .pick-cancel{ background:#fff; border:1px solid var(--border); color:var(--text); }
+  .pick-ok{ background:var(--accent); color:#fff; border:none; font-weight:700; }
 
   .custom-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .custom-row input{
@@ -393,6 +447,30 @@
 
 <input type="file" id="importFile" hidden accept=".json">
 
+<div class="pick-mask" id="pickMask" hidden>
+  <div class="pick-panel">
+    <div class="pick-title">
+      <span id="pickTitle">选择颜色</span>
+      <button class="edit-btn" id="pickClose">关闭</button>
+    </div>
+    <div class="sv" id="svBox">
+      <i class="sv-hue" id="svHue"></i>
+      <i class="sv-white"></i>
+      <i class="sv-black"></i>
+      <span class="sv-cursor" id="svCursor"></span>
+    </div>
+    <div class="hue" id="hueBar"><span class="hue-knob" id="hueKnob"></span></div>
+    <div class="pick-row">
+      <div class="pick-prev" id="pickPrev"></div>
+      <div class="pick-hex"><label>HEX</label><input id="pickHex" maxlength="7" placeholder="#RRGGBB" spellcheck="false"></div>
+    </div>
+    <div class="pick-actions">
+      <button class="pick-cancel" id="pickCancel">取消</button>
+      <button class="pick-ok" id="pickOk">确定</button>
+    </div>
+  </div>
+</div>
+
 <div class="picker-mask" id="pickerMask" hidden>
   <div class="picker-sheet">
     <div class="picker-head">
@@ -615,13 +693,114 @@ function chipEl(b,selected,onClick,deletable){
   c.style.setProperty("--c",b.color);
   const t=document.createElement("span"); t.textContent=b.name; c.appendChild(t);
   if(deletable){
+    /* 改色入口：编辑模式下双击行为即可调出取色器（🎨 按钮便于手机点按） */
+    if(!isInlineId(b.id)){
+      const p=document.createElement("i"); p.className="pal"; p.textContent="🎨"; p.title="修改颜色";
+      p.addEventListener("click",ev=>{ ev.stopPropagation(); openPicker(b.id,b.name,colorOf(b.id)); });
+      p.addEventListener("dblclick",ev=>ev.stopPropagation());
+      c.appendChild(p);
+      c.addEventListener("dblclick",()=>openPicker(b.id,b.name,colorOf(b.id)));
+      c.title="双击可修改颜色";
+    }
     const d=document.createElement("i"); d.className="del"; d.textContent="×"; d.title="删除该常用行为";
     d.addEventListener("click",ev=>{ ev.stopPropagation(); deleteBehavior(b.id); });
+    d.addEventListener("dblclick",ev=>ev.stopPropagation());
     c.appendChild(d);
   }
   c.addEventListener("click",onClick);
   return c;
 }
+
+/* ---------- 取色器（无透明度，确定后更新该行为的所有记录颜色） ---------- */
+let pickTargetId=null, pickH=0, pickS=1, pickV=1;
+function hsvToRgb(h,s,v){
+  const i=Math.floor(h*6), f=h*6-i, p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+  let r,g,b;
+  switch(i%6){
+    case 0: r=v; g=t; b=p; break;
+    case 1: r=q; g=v; b=p; break;
+    case 2: r=p; g=v; b=t; break;
+    case 3: r=p; g=q; b=v; break;
+    case 4: r=t; g=p; b=v; break;
+    default: r=v; g=p; b=q;
+  }
+  return {r:Math.round(r*255), g:Math.round(g*255), b:Math.round(b*255)};
+}
+function rgbToHex(r,g,b){ return "#"+[r,g,b].map(x=>Math.max(0,Math.min(255,x)).toString(16).padStart(2,"0")).join("").toUpperCase(); }
+function hexToRgb(hex){
+  const m=String(hex||"").trim().replace(/^#/,"");
+  if(!/^[0-9a-fA-F]{6}$/.test(m)) return null;
+  return {r:parseInt(m.slice(0,2),16), g:parseInt(m.slice(2,4),16), b:parseInt(m.slice(4,6),16)};
+}
+function rgbToHsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let h=0;
+  if(d){
+    if(mx===r) h=((g-b)/d)%6;
+    else if(mx===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h/=6; if(h<0) h+=1;
+  }
+  return {h:h, s:mx?d/mx:0, v:mx};
+}
+function pickerHex(){ const c=hsvToRgb(pickH,pickS,pickV); return rgbToHex(c.r,c.g,c.b); }
+function renderPicker(){
+  $("svHue").style.background="hsl("+(pickH*360).toFixed(0)+",100%,50%)";
+  $("svCursor").style.left=(pickS*100)+"%";
+  $("svCursor").style.top=((1-pickV)*100)+"%";
+  $("hueKnob").style.left=(pickH*100)+"%";
+  const hex=pickerHex();
+  $("pickPrev").style.background=hex;
+  if(document.activeElement!==$("pickHex")) $("pickHex").value=hex;
+}
+function openPicker(id,name,colorHex){
+  const rgb=hexToRgb(colorHex)||{r:108,g:123,b:217};
+  const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b);
+  pickTargetId=id; pickH=hsv.h; pickS=hsv.s; pickV=hsv.v;
+  $("pickTitle").textContent="修改颜色 · "+name;
+  $("pickMask").hidden=false;
+  renderPicker();
+}
+function closePicker(){ $("pickMask").hidden=true; pickTargetId=null; }
+
+let svDragging=false, hueDragging=false;
+function svFromEvent(ev){
+  const r=$("svBox").getBoundingClientRect();
+  const x=Math.min(Math.max(ev.clientX-r.left,0),r.width);
+  const y=Math.min(Math.max(ev.clientY-r.top,0),r.height);
+  pickS=r.width?x/r.width:0;
+  pickV=r.height?1-y/r.height:0;
+  renderPicker();
+}
+function hueFromEvent(ev){
+  const r=$("hueBar").getBoundingClientRect();
+  const x=Math.min(Math.max(ev.clientX-r.left,0),r.width);
+  pickH=r.width?Math.min(x/r.width,0.9999):0;
+  renderPicker();
+}
+$("svBox").addEventListener("pointerdown",e=>{ svDragging=true; if(e.pointerId!=null) $("svBox").setPointerCapture(e.pointerId); svFromEvent(e); e.preventDefault(); });
+$("svBox").addEventListener("pointermove",e=>{ if(svDragging){ svFromEvent(e); e.preventDefault(); } });
+["pointerup","pointercancel"].forEach(t=>$("svBox").addEventListener(t,()=>{ svDragging=false; }));
+$("hueBar").addEventListener("pointerdown",e=>{ hueDragging=true; if(e.pointerId!=null) $("hueBar").setPointerCapture(e.pointerId); hueFromEvent(e); e.preventDefault(); });
+$("hueBar").addEventListener("pointermove",e=>{ if(hueDragging){ hueFromEvent(e); e.preventDefault(); } });
+["pointerup","pointercancel"].forEach(t=>$("hueBar").addEventListener(t,()=>{ hueDragging=false; }));
+$("pickHex").addEventListener("input",()=>{
+  const rgb=hexToRgb($("pickHex").value);
+  if(!rgb) return;
+  const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b);
+  pickH=hsv.h; pickS=hsv.s; pickV=hsv.v;
+  renderPicker();
+});
+$("pickOk").addEventListener("click",()=>{
+  const b=behaviorOf(pickTargetId);
+  if(b){ b.color=pickerHex(); saveStore(); }
+  closePicker();
+});
+$("pickCancel").addEventListener("click",closePicker);
+$("pickClose").addEventListener("click",closePicker);
+$("pickMask").addEventListener("click",e=>{ if(e.target===$("pickMask")) closePicker(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").hidden) closePicker(); });
 
 /* 不适合作为副行为的行为：纯占用型 & 通常作为主行为 */
 const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
