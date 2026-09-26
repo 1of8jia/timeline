@@ -67,6 +67,12 @@
   }
   .block-title{ font-size:13px; color:var(--muted); margin:14px 0 8px; font-weight:700; letter-spacing:.5px; }
   .block-title:first-child{ margin-top:0; }
+  .edit-btn{
+    border:none; background:var(--accent-soft); color:var(--accent);
+    border-radius:6px; padding:1px 10px; font-size:11px; cursor:pointer;
+    font-family:inherit; font-weight:400;
+  }
+  .edit-btn.active{ background:var(--accent); color:#fff; }
 
   .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .nav-row{ justify-content:center; margin-bottom:6px; gap:8px; }
@@ -86,6 +92,9 @@
     border:1px solid var(--border); border-radius:10px; padding:7px 10px; background:#fff; min-width:110px;
   }
   .time-row label{ font-size:12px; color:var(--muted); display:block; margin-bottom:2px; }
+  .sleep-time-row{ flex-wrap:nowrap; }
+  .sleep-time-row > div{ flex:1; min-width:0; }
+  .sleep-time-row select{ width:100%; min-width:0; }
 
   .chips{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{
@@ -147,10 +156,10 @@
 
   /* 周视图 */
   .week-scroll{ overflow-x:auto; }
-  .week-grid{ display:flex; min-width:560px; }
-  .hour-col{ width:34px; flex:none; }
-  .hour-mark{ height:calc(var(--slot) * 6); font-size:10px; color:var(--muted); text-align:right; padding-right:5px; line-height:1; position:relative; top:-4px; }
-  .day-col{ flex:1; min-width:64px; }
+  .week-grid{ display:flex; }
+  .hour-col{ width:30px; flex:none; }
+  .hour-mark{ height:calc(var(--slot) * 6); font-size:10px; color:var(--muted); text-align:right; padding-right:4px; line-height:1; position:relative; top:-4px; }
+  .day-col{ flex:1; min-width:0; }
   .day-head{
     text-align:center; font-size:12px; color:var(--muted); padding-bottom:6px;
   }
@@ -200,6 +209,13 @@
     main{ padding:12px 12px 86px; }
     .nav-label{ min-width:150px; font-size:14px; }
     .stat-bar{ width:70px; }
+    /* 手机端周视图：压缩列宽，7列同屏显示 */
+    .week-grid .hour-col{ width:22px; }
+    .week-grid .hour-mark{ font-size:8px; padding-right:2px; }
+    .day-head{ font-size:10px; padding-bottom:4px; }
+    .day-head b{ font-size:11px; }
+    .wlabel{ font-size:8px; }
+    .day-slots{ border-radius:4px; }
   }
 </style>
 </head>
@@ -240,7 +256,9 @@
         <div><label>结束</label><select id="recEnd"></select></div>
       </div>
 
-      <div class="block-title">主行为</div>
+      <div class="block-title" style="display:flex;align-items:center;gap:8px">主行为
+        <button class="edit-btn" id="editBehBtn" title="编辑常用行为（删除等）">编辑</button>
+      </div>
       <div class="chips" id="mainChips"></div>
       <div class="custom-row">
         <input id="newBehavior" placeholder="自定义行为名称，如：外刊精读" maxlength="10">
@@ -258,10 +276,10 @@
 
     <div class="card">
       <div class="block-title">😴 睡眠快捷填充（自动跨天计算）</div>
-      <div class="row time-row" style="justify-content:flex-start">
-        <div><label>入睡时间（前一晚20:00–次日05:00）</label><select id="bedSel"></select></div>
+      <div class="row time-row sleep-time-row" style="justify-content:flex-start;flex-wrap:nowrap">
+        <div><label>入睡时间</label><select id="bedSel"></select></div>
         <div style="font-size:18px;color:var(--muted);padding-top:16px">→</div>
-        <div><label>起床时间（今天）</label><select id="wakeSel"></select></div>
+        <div><label>起床时间</label><select id="wakeSel"></select></div>
       </div>
       <div class="empty-tip" style="text-align:left" id="sleepHint"></div>
       <div class="row actions">
@@ -392,7 +410,7 @@ function isSleep(id){ const b=behaviorOf(id); return !!b && b.name==="睡觉"; }
 /* ---------- 状态 ---------- */
 let view="record";
 let recDate = todayStr();
-let selMain=null, selSub=null;
+let selMain=null, selSub=null, editingBehaviors=false;
 let weekMonday = fmtDate(mondayOf(new Date()));
 let statsDate = todayStr(), statsMode="day", showSleep=true;
 
@@ -480,7 +498,7 @@ function chipEl(b,selected,onClick,deletable){
 function renderChips(){
   const mc=$("mainChips"); mc.innerHTML="";
   store.behaviors.forEach(b=>{
-    mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, true));
+    mc.appendChild(chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors));
   });
   if(!store.behaviors.length){
     const tip=document.createElement("span"); tip.className="empty-tip"; tip.textContent="暂无常用行为，请在下方添加"; mc.appendChild(tip);
@@ -500,6 +518,14 @@ function deleteBehavior(id){
   if(selSub===id) selSub=null;
   saveStore();
 }
+
+/* 主行为编辑模式：仅在编辑状态下显示删除按钮，避免误触 */
+$("editBehBtn").addEventListener("click",()=>{
+  editingBehaviors=!editingBehaviors;
+  $("editBehBtn").textContent = editingBehaviors?"完成":"编辑";
+  $("editBehBtn").classList.toggle("active",editingBehaviors);
+  renderChips();
+});
 
 $("addBehavior").addEventListener("click",()=>{
   const v=$("newBehavior").value.trim();
