@@ -801,10 +801,10 @@ $("wkExport").addEventListener("click",exportWeekImage);
 /* 用 Canvas 重绘周视图并导出为 JPG */
 function exportWeekImage(){
   const mon=parseISO(weekMonday);
-  const P=18;               // 外边距
-  const HOUR_W=30;          // 小时列宽
-  const DAY_W=76;           // 每天列宽（压缩以适应手机屏幕）
-  const SLOT_H=4;           // 每10分钟格高
+  const P=16;               // 外边距
+  const HOUR_W=28;          // 小时列宽
+  const DAY_W=60;           // 每天列宽（压缩以适应手机屏幕）
+  const SLOT_H=4.8;         // 每10分钟格高（拉长整体比例）
   const HEAD_H=38;          // 日期表头高
   const LEGEND_H=56;        // 底部图例高
   const TITLE_H=72;         // 标题区高
@@ -837,7 +837,7 @@ function exportWeekImage(){
   for(let d=0;d<7;d++){
     const dayDate=addDays(mon,d), date=fmtDate(dayDate);
     const x=gridX+d*DAY_W;
-    ctx.font=(date===today?"bold 12px":"12px")+" 'Microsoft YaHei'";
+    ctx.font=(date===today?"bold 11px":"11px")+" 'Microsoft YaHei'";
     ctx.fillStyle=date===today?"#6C7BD9":"#3B4256";
     ctx.fillText((dayDate.getMonth()+1)+"/"+dayDate.getDate(), x+DAY_W/2, TITLE_H+11);
     ctx.font="10px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
