@@ -1017,10 +1017,13 @@ function makeSortable(chip){
     if(dropToSub){
       /* 复制为副行为：选中该行为作为副行为（原主行为不动） */
       const bid=chip.dataset.bid;
-      if(Array.isArray(store.subIds) && !store.subIds.includes(bid)) store.subIds.push(bid);
+      let added=false;
+      if(Array.isArray(store.subIds) && !store.subIds.includes(bid)){ store.subIds.push(bid); added=true; }
       selSub=bid;
       setSubVisible(true);
-      renderChips();
+      /* 仅在副行为候选集合真正发生变化时才写盘，避免无效 IO */
+      if(added) saveStore();
+      else renderChips();
     }else if(editingBehaviors){
       /* 仅在主行为编辑模式才保存排序 */
       saveChipOrder();
