@@ -164,6 +164,8 @@
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
   /* 编辑模式下长按拖动排序：禁止触摸滚动/系统菜单，避免拖拽与滚动冲突 */
   .chips.editing .chip{ touch-action:none; -webkit-touch-callout:none; }
+  /* 副行为编辑模式：仅显示 × 按钮（无颜色编辑/拖拽） */
+  .chips.sub-editing{ background:var(--accent-soft); border-radius:10px; padding:4px 6px; margin:0 -6px; }
   /* 拖拽中悬停在副行为区/主行为区，给出落点提示 */
   #subChips.drop-target, #subToggle.drop-target, .block-title.drop-target{
     outline:2px dashed var(--accent); outline-offset:3px; border-radius:10px;
@@ -409,6 +411,7 @@
 
       <div class="block-title" style="display:flex;align-items:center;gap:8px">副行为
         <button class="edit-btn" id="subToggle">展开</button>
+        <button class="edit-btn" id="subEditBtn" hidden>编辑</button>
       </div>
       <div class="chips" id="subChips" hidden></div>
 
@@ -566,7 +569,7 @@ function loadStore(){
     const raw = localStorage.getItem(KEY);
     if(raw){ store = JSON.parse(raw); if(!store.behaviors || !store.days) throw 0; if(store.v!==1) { migrate(); store.v=1; save(); } return; }
   }catch(e){}
-  store = { v:1, behaviors: PRESETS.slice(), days:{} };
+  store = { v:1, behaviors: PRESETS.slice(), days:{}, subIds: PRESETS.map(p=>p.id) };
 }
 /* 将旧数据迁移到分组配色：按名称更新默认行为颜色并补齐新增项（保留原id，历史记录不受影响），自定义行为排在后面 */
 function migrate(){
@@ -588,6 +591,8 @@ function migrate(){
     return old ? {id:old.id, name:p.name, color:p.color} : p;
   });
   store.behaviors = kept.concat(customs);
+  /* 副行为候选列表（subIds）：旧版没有此字段，默认所有常用行为都是副行为候选 */
+  if(!Array.isArray(store.subIds)) store.subIds = store.behaviors.map(b=>b.id);
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
 function saveStore(){ save(); renderAll(); }
@@ -616,7 +621,7 @@ function isSleep(id){ const b=behaviorOf(id); return !!b && b.name==="睡觉"; }
 /* ---------- 状态 ---------- */
 let view="record";
 let recDate = todayStr();
-let selMain=null, selSub=null, editingBehaviors=false;
+let selMain=null, selSub=null, editingBehaviors=false, subEditing=false;
 let weekMonday = fmtDate(mondayOf(new Date()));
 let statsDate = todayStr(), statsMode="day", showSleep=true;
 let pctMode="period";   // period=占全天/周期，recorded=占已记录时长
@@ -739,20 +744,21 @@ function updateEndOptions(){
   syncTimeBtns();
 }
 
-function chipEl(b,selected,onClick,deletable){
+function chipEl(b,selected,onClick,deletable,subDeletable){
   const c=document.createElement("span");
   c.className="chip"+(selected?" selected":"");
   c.style.setProperty("--c",b.color);
   if(b.id) c.dataset.bid=b.id;
   const t=document.createElement("span"); t.textContent=b.name; c.appendChild(t);
-  if(deletable){
-    /* 改色入口：编辑模式下双击行为即可调出取色器 */
-    if(!isInlineId(b.id)){
+  if(deletable || subDeletable){
+    /* 主行为编辑模式才允许双击改色；副行为编辑模式仅删除 */
+    if(deletable && !isInlineId(b.id)){
       c.addEventListener("dblclick",()=>openColorPicker(b.id,b.name,colorOf(b.id)));
       c.title="双击可修改颜色";
     }
-    const d=document.createElement("i"); d.className="del"; d.textContent="×"; d.title="删除该常用行为";
-    d.addEventListener("click",ev=>{ ev.stopPropagation(); deleteBehavior(b.id); });
+    const d=document.createElement("i"); d.className="del"; d.textContent="×";
+    d.title = deletable ? "删除该常用行为" : "从副行为候选移除";
+    d.addEventListener("click",ev=>{ ev.stopPropagation(); subDeletable ? removeFromSub(b.id) : deleteBehavior(b.id); });
     d.addEventListener("dblclick",ev=>ev.stopPropagation());
     c.appendChild(d);
   }
@@ -851,8 +857,7 @@ $("pickClose").addEventListener("click",closeColorPicker);
 $("pickMask").addEventListener("click",e=>{ if(e.target===$("pickMask")) closeColorPicker(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("pickMask").hidden) closeColorPicker(); });
 
-/* 不适合作为副行为的行为：纯占用型 & 通常作为主行为 */
-const SUB_EXCLUDED = ["上课","实习","口译练习","睡觉","洗澡","看比赛"];
+/* ---------- 渲染：主/副行为标签 ---------- */
 function renderChips(){
   /* 兜底清理：若有拖拽残留的克隆/占位元素，重绘前先移除 */
   if(!draggingChip) document.querySelectorAll(".drag-clone,.drag-ph").forEach(el=>el.remove());
@@ -883,10 +888,13 @@ function renderChips(){
     mc.appendChild(c);
   }
   const sc=$("subChips"); sc.innerHTML="";
+  sc.classList.toggle("sub-editing", subEditing);
   const none={id:null,name:"无",color:"#C6CBDB"};
-  sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
-  store.behaviors.forEach(b=>{
-    sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
+  sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false, false)).classList.add("neutral");
+  /* 副行为候选 = 用户在副行为编辑模式下保留的行为 id 列表（store.subIds） */
+  if(!Array.isArray(store.subIds)) store.subIds = store.behaviors.map(b=>b.id);
+  store.behaviors.filter(b => store.subIds.includes(b.id)).forEach(b=>{
+    sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false, subEditing));
   });
   updateSubToggle();
 }
@@ -895,19 +903,41 @@ let subExpanded=false;
 $("subToggle").addEventListener("click",()=>{
   subExpanded=!subExpanded;
   $("subChips").hidden=!subExpanded;
+  if(!subExpanded && subEditing){ subEditing=false; }
   updateSubToggle();
+  renderChips();
+});
+$("subEditBtn").addEventListener("click",()=>{
+  if(!subExpanded) return;
+  subEditing=!subEditing;
+  updateSubToggle();
+  renderChips();
 });
 function updateSubToggle(){
+  const eb=$("subEditBtn");
   if(subExpanded){
     $("subToggle").textContent="收起";
+    eb.hidden=false;
+    eb.textContent = subEditing ? "完成" : "编辑";
+    eb.classList.toggle("active", subEditing);
   }else{
     $("subToggle").textContent = selSub ? "展开 · 已选"+nameOf(selSub) : "展开";
+    eb.hidden=true;
   }
+}
+/* 副行为编辑模式：从副行为候选中移除（仍保留为主行为，可随时加回） */
+function removeFromSub(id){
+  const nm=nameOf(id);
+  if(!confirm("将「"+nm+"」从副行为候选移除？以后不会再出现在副行为列表（仍是主行为，删除主行为不会自动恢复）。")) return;
+  if(Array.isArray(store.subIds)) store.subIds = store.subIds.filter(x=>x!==id);
+  if(selSub===id) selSub=null;
+  saveStore();
 }
 
 function deleteBehavior(id){
   if(!confirm("确定删除常用行为「"+nameOf(id)+"」吗？已有记录会保留但显示为灰色。")) return;
   store.behaviors=store.behaviors.filter(b=>b.id!==id);
+  if(Array.isArray(store.subIds)) store.subIds = store.subIds.filter(x=>x!==id);
   if(selMain===id) selMain=null;
   if(selSub===id) selSub=null;
   saveStore();
@@ -971,7 +1001,9 @@ function makeSortable(chip){
     if(!commit){ setSubVisible(prevSubExpanded); return; }
     if(dropToSub){
       /* 复制为副行为：选中该行为作为副行为（原主行为不动） */
-      selSub=chip.dataset.bid;
+      const bid=chip.dataset.bid;
+      if(Array.isArray(store.subIds) && !store.subIds.includes(bid)) store.subIds.push(bid);
+      selSub=bid;
       setSubVisible(true);
       renderChips();
     }else{
@@ -1094,6 +1126,7 @@ $("addBehavior").addEventListener("click",()=>{
   if(b){ alert("已存在同名行为"); selMain=b.id; $("newBehavior").value=""; renderChips(); updateCustomHint(); return; }
   b={id:"c"+Date.now(), name:v, color:PALETTE[store.behaviors.length%PALETTE.length]};
   store.behaviors.push(b);
+  if(Array.isArray(store.subIds)) store.subIds.push(b.id);   // 默认加入副行为候选
   /* 此前以内联名称 "~v" 记录的时段归并到新常用行为下，统计颜色统一 */
   const pseudo="~"+v;
   Object.keys(store.days).forEach(ds=>{
