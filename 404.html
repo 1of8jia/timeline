@@ -402,7 +402,7 @@
         <button class="edit-btn" id="editBehBtn" title="编辑常用行为（删除等）">编辑</button>
       </div>
       <div class="chips" id="mainChips"></div>
-      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 拖到下方设为副行为 · 双击改颜色 · × 删除</div>
+      <div class="edit-tip" id="editHint" hidden>提示：长按拖动主行为到下方设为副行为</div>
       <div class="custom-row">
         <input id="newBehavior" placeholder="自定义行为（可直接标记）" maxlength="10">
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
@@ -866,7 +866,8 @@ function renderChips(){
   const commons=store.behaviors.filter(b=>!b.temp);
   commons.forEach(b=>{
     const c=chipEl(b, selMain===b.id, ()=>{ selMain = selMain===b.id?null:b.id; renderChips(); }, editingBehaviors);
-    if(editingBehaviors) makeSortable(c);
+    /* 拖拽排序仅在主行为编辑模式生效；拖到下方加为副行为在任意模式下都可 */
+    makeSortable(c);
     mc.appendChild(c);
   });
   if(!commons.length){
@@ -924,6 +925,7 @@ function updateSubToggle(){
     $("subToggle").textContent = selSub ? "展开 · 已选"+nameOf(selSub) : "展开";
     eb.hidden=true;
   }
+  updateEditHint();
 }
 /* 副行为编辑模式：从副行为候选中移除（仍保留为主行为，可随时加回） */
 function removeFromSub(id){
@@ -944,11 +946,23 @@ function deleteBehavior(id){
 }
 
 /* 主行为编辑模式：仅在编辑状态下显示删除按钮，避免误触 */
+/* 提示文案：副行为展开 → 引导拖拽到下方；主行为编辑模式 → 提示全集 */
+const EDIT_HINT_NORMAL = "提示：长按拖动主行为到下方设为副行为";
+const EDIT_HINT_EDIT   = "长按拖动可排序 · 拖到下方设为副行为 · 双击改颜色 · × 删除";
+function updateEditHint(){
+  if(editingBehaviors){
+    $("editHint").textContent = EDIT_HINT_EDIT;
+    $("editHint").hidden = false;
+  }else{
+    $("editHint").textContent = EDIT_HINT_NORMAL;
+    $("editHint").hidden = !subExpanded;
+  }
+}
 $("editBehBtn").addEventListener("click",()=>{
   editingBehaviors=!editingBehaviors;
   $("editBehBtn").textContent = editingBehaviors?"完成":"编辑";
   $("editBehBtn").classList.toggle("active",editingBehaviors);
-  $("editHint").hidden=!editingBehaviors;
+  updateEditHint();
   renderChips();
 });
 
@@ -1006,8 +1020,11 @@ function makeSortable(chip){
       selSub=bid;
       setSubVisible(true);
       renderChips();
-    }else{
+    }else if(editingBehaviors){
+      /* 仅在主行为编辑模式才保存排序 */
       saveChipOrder();
+      setSubVisible(prevSubExpanded);
+    }else{
       setSubVisible(prevSubExpanded);
     }
   }
@@ -1058,11 +1075,14 @@ function makeSortable(chip){
     clone.querySelectorAll(".del").forEach(el=>el.remove());
     clone.style.width=r.width+"px";
     document.body.appendChild(clone);
-    ph=document.createElement("span");
-    ph.className="drag-ph";
-    ph.style.width=r.width+"px";
-    ph.style.height=r.height+"px";
-    $("mainChips").insertBefore(ph,chip);
+    /* 占位（用于主行为区内重排序可视化）仅在编辑模式下创建 */
+    if(editingBehaviors){
+      ph=document.createElement("span");
+      ph.className="drag-ph";
+      ph.style.width=r.width+"px";
+      ph.style.height=r.height+"px";
+      $("mainChips").insertBefore(ph,chip);
+    }
     chip.classList.add("drag-src");
     move({clientX:x,clientY:y,preventDefault(){}});
   }
@@ -1070,6 +1090,8 @@ function makeSortable(chip){
     if(!clone) return;
     clone.style.left=e.clientX+"px";
     clone.style.top=e.clientY+"px";
+    /* 非编辑模式：不显示重排序占位，只显示拖拽克隆体 */
+    if(!editingBehaviors) return;
     const box=$("mainChips");
     const sibs=[...box.querySelectorAll(".chip[data-bid]")].filter(el=>el!==chip);
     for(const s of sibs){
