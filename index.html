@@ -1428,6 +1428,14 @@ function statsLabel(dates){
     return (a.getMonth()+1)+"/"+a.getDate()+" – "+(b.getMonth()+1)+"/"+b.getDate(); }
   return d.getFullYear()+"年"+(d.getMonth()+1)+"月";
 }
+/* 当前统计周期的总分钟数（用于把百分比换算成“占周期的比例”） */
+function periodMinutes(){
+  const d=parseISO(statsDate);
+  if(statsMode==="day")  return 1440;
+  if(statsMode==="week") return 7*1440;
+  /* month：按 statsDate 所在月的实际天数（处理 28/29/30/31） */
+  return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()*1440;
+}
 
 function totals(dates){
   const t={};
@@ -1451,6 +1459,7 @@ function renderStats(){
   if(!showSleep) items=items.filter(it=>!isSleep(it.id));
   items.sort((a,b)=>b.value-a.value);
   const total=items.reduce((s,it)=>s+it.value,0);
+  const periodMin=periodMinutes();
   drawDonut(items,total);
   // 图例
   const lg=$("statsLegend"); lg.innerHTML="";
@@ -1466,7 +1475,7 @@ function renderStats(){
     const bi=document.createElement("i"); bi.style.width=(max?it.value/max*100:0)+"%"; bi.style.background=it.color;
     bar.appendChild(bi);
     const val=document.createElement("span"); val.className="stat-val";
-    val.textContent=(it.value/60).toFixed(1)+"小时 · "+(total?(it.value/total*100).toFixed(1):0)+"%";
+    val.textContent=(it.value/60).toFixed(1)+"小时 · "+(periodMin?(it.value/periodMin*100).toFixed(1):0)+"%";
     row.appendChild(nm); row.appendChild(bar); row.appendChild(val);
     lg.appendChild(row);
   });
