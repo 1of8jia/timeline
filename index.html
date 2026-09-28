@@ -164,6 +164,11 @@
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
   /* 编辑模式下长按拖动排序：禁止触摸滚动/系统菜单，避免拖拽与滚动冲突 */
   .chips.editing .chip{ touch-action:none; -webkit-touch-callout:none; }
+  /* 拖拽中悬停在副行为区/主行为区，给出落点提示 */
+  #subChips.drop-target, #subToggle.drop-target, .block-title.drop-target{
+    outline:2px dashed var(--accent); outline-offset:3px; border-radius:10px;
+    background:var(--accent-soft); transition:background .15s linear;
+  }
   .drag-clone{
     position:fixed; z-index:95; pointer-events:none; margin:0;
     transform:translate(-50%,-50%) rotate(2deg) scale(1.06);
@@ -376,7 +381,7 @@
         <button class="edit-btn" id="editBehBtn" title="编辑常用行为（删除等）">编辑</button>
       </div>
       <div class="chips" id="mainChips"></div>
-      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 双击改颜色 · × 删除</div>
+      <div class="edit-tip" id="editHint" hidden>长按拖动可排序 · 拖到下方设为副行为 · 双击改颜色 · × 删除</div>
       <div class="custom-row">
         <input id="newBehavior" placeholder="自定义行为（可直接标记）" maxlength="10">
         <button class="ghost" id="addBehavior" style="padding:7px 14px">＋ 添加为常用</button>
@@ -847,7 +852,7 @@ function renderChips(){
   const sc=$("subChips"); sc.innerHTML="";
   const none={id:null,name:"无",color:"#C6CBDB"};
   sc.appendChild(chipEl(none, selSub===null, ()=>{ selSub=null; renderChips(); }, false)).classList.add("neutral");
-  store.behaviors.filter(b=>!SUB_EXCLUDED.includes(b.name)).forEach(b=>{
+  store.behaviors.forEach(b=>{
     sc.appendChild(chipEl(b, selSub===b.id, ()=>{ selSub = selSub===b.id?null:b.id; renderChips(); }, false));
   });
   updateSubToggle();
@@ -884,15 +889,30 @@ $("editBehBtn").addEventListener("click",()=>{
   renderChips();
 });
 
-/* ---------- 编辑模式：长按拖动自由排序 ----------
+/* ---------- 编辑模式：长按拖动自由排序 + 拖到副行为区 ----------
    要点：拖拽过程中绝不移动原标签（移动 DOM 节点会丢失 pointer capture，导致事件中断、卡住），
-   只移动一个占位标记 ph，松手时才把原标签插到该位置；事件监听挂在 document 上更可靠。 */
+   只移动一个占位标记 ph，松手时才把原标签插到该位置；事件监听挂在 document 上更可靠。
+   拖到副行为区（#subChips / 展开按钮）→ 在副行为里选中该行为（不删主行为）；否则按主区排序。 */
 const DRAG_DELAY=280, DRAG_SLOP=8;
 let draggingChip=null;
 function makeSortable(chip){
   let timer=null, dragging=false, clone=null, ph=null, sx=0, sy=0, suppressClick=false;
+  let curX=0, curY=0, prevSubExpanded=false;
 
   const cancelTimer=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  const subEl=()=>$("subChips");
+  const subToggle=()=>$("subToggle");
+  const isSubHover=()=>{
+    const t=document.elementFromPoint(curX,curY);
+    return !!(t && (subEl().contains(t) || subToggle().contains(t)));
+  };
+  const setSubVisible=(vis)=>{
+    subExpanded=vis;
+    subEl().hidden=!vis;
+    updateSubToggle();
+  };
+  const clearHighlight=()=>{ subEl().classList.remove("drop-target"); subToggle().classList.remove("drop-target"); };
+
   function endDrag(commit){
     cancelTimer();
     document.removeEventListener("pointermove",onMove);
@@ -903,15 +923,28 @@ function makeSortable(chip){
     if(!dragging) return;
     dragging=false;
     draggingChip=null;
-    suppressClick=true;                 // 吞掉紧随的 click，避免误改选中状态
+    suppressClick=true;
+    const dropToSub = commit && isSubHover();
     if(clone){ clone.remove(); clone=null; }
+    let savedSlot=null;
     if(ph){
-      const box=$("mainChips");
-      if(commit && ph.parentNode) box.insertBefore(chip, ph);
+      const parent=ph.parentNode;
+      savedSlot=ph.nextSibling;
       ph.remove(); ph=null;
+      if(!dropToSub && parent===$("mainChips")) parent.insertBefore(chip, savedSlot);
     }
     chip.classList.remove("drag-src");
-    if(commit) saveChipOrder();
+    clearHighlight();
+    if(!commit){ setSubVisible(prevSubExpanded); return; }
+    if(dropToSub){
+      /* 复制为副行为：选中该行为作为副行为（原主行为不动） */
+      selSub=chip.dataset.bid;
+      setSubVisible(true);
+      renderChips();
+    }else{
+      saveChipOrder();
+      setSubVisible(prevSubExpanded);
+    }
   }
   /* 拖拽结束后吞掉紧随的 click，避免误改选中状态 */
   chip.addEventListener("click",e=>{
@@ -926,13 +959,18 @@ function makeSortable(chip){
       return;
     }
     e.preventDefault();
+    curX=e.clientX; curY=e.clientY;
     move(e);
+    /* 副行为区高亮 + 自动展开 */
+    if(isSubHover()){ setSubVisible(true); subEl().classList.add("drop-target"); subToggle().classList.add("drop-target"); }
+    else { clearHighlight(); setSubVisible(prevSubExpanded); }
   }
   chip.addEventListener("pointerdown",e=>{
     if(e.target.closest(".del")) return;
     if(e.button!==undefined && e.button!==0) return;
     if(draggingChip) return;
     sx=e.clientX; sy=e.clientY;
+    curX=sx; curY=sy;
     cancelTimer();
     timer=setTimeout(()=>startDrag(e.clientX,e.clientY),DRAG_DELAY);
     document.addEventListener("pointermove",onMove);
@@ -945,13 +983,14 @@ function makeSortable(chip){
     timer=null;
     dragging=true;
     draggingChip=chip;
-    document.querySelectorAll(".drag-clone").forEach(el=>el.remove());  // 清理可能残留的克隆
+    prevSubExpanded=subExpanded;
+    document.querySelectorAll(".drag-clone").forEach(el=>el.remove());
     const r=chip.getBoundingClientRect();
     if(navigator.vibrate) navigator.vibrate(20);
     clone=chip.cloneNode(true);
     clone.classList.add("drag-clone");
     clone.classList.remove("selected");
-    clone.querySelectorAll(".del").forEach(el=>el.remove());  // 悬浮标签上不显示删除按钮
+    clone.querySelectorAll(".del").forEach(el=>el.remove());
     clone.style.width=r.width+"px";
     document.body.appendChild(clone);
     ph=document.createElement("span");
