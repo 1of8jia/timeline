@@ -162,7 +162,8 @@
   .chip.temp{ border-style:dashed; background:#FBFCFF; }
   .chip.temp.selected{ border-style:solid; }
   .chips-sub{ flex-basis:100%; width:100%; font-size:12px; color:var(--muted); margin-top:8px; }
-  /* 编辑模式下长按拖动排序：禁止触摸滚动/系统菜单，避免拖拽与滚动冲突 */
+  /* 长按拖动主行为（排序 / 拖到副行为）：禁止浏览器滚动与长按菜单，保证拖到下方时手势不被抢 */
+  #mainChips .chip{ touch-action:none; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
   .chips.editing .chip{ touch-action:none; -webkit-touch-callout:none; }
   /* 副行为编辑模式：仅显示 × 按钮（无颜色编辑/拖拽） */
   .chips.sub-editing{ background:var(--accent-soft); border-radius:10px; padding:4px 6px; margin:0 -6px; }
