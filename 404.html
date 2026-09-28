@@ -305,6 +305,25 @@
   .sleep-row{ justify-content:center; margin:4px 0 10px; }
   .sleep-row label{ display:flex; align-items:center; gap:6px; font-size:14px; color:var(--text); cursor:pointer; }
   .sleep-row input{ width:16px; height:16px; accent-color:var(--accent); }
+  /* 通用开关（on/off） */
+  .toggle-row{ justify-content:center; align-items:center; gap:10px; margin:6px 0 10px; }
+  .tg-label{ font-size:13px; color:var(--muted); }
+  .tg-label.active{ color:var(--accent); font-weight:700; }
+  .switch{ position:relative; display:inline-block; width:46px; height:26px; flex:none; cursor:pointer; }
+  .switch input{ position:absolute; opacity:0; width:0; height:0; }
+  .switch .slider{
+    position:absolute; inset:0; background:#D7DBE8; border-radius:999px;
+    transition:background .18s linear;
+  }
+  .switch .slider::before{
+    content:""; position:absolute; width:20px; height:20px; left:3px; top:3px;
+    background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(40,46,70,.28);
+    transition:transform .18s cubic-bezier(.4,.1,.2,1);
+  }
+  .switch input:checked + .slider{ background:#4CAF50; }
+  .switch input:checked + .slider::before{ transform:translateX(20px); }
+  .switch input:focus-visible + .slider{ box-shadow:0 0 0 3px var(--accent-soft); }
+  .pct-note{ text-align:center; font-size:12px; color:var(--muted); margin:0 0 10px; }
   .chart-wrap{ display:flex; justify-content:center; padding:8px 0 4px; }
   /* 三块：图例左对齐 · 占比条左对齐 · 数据右对齐（列宽固定，保证逐行对齐） */
   .stat-row{
@@ -455,9 +474,22 @@
         <button class="nav-btn" id="stNext">▶</button>
         <button class="ghost" id="stToday" style="padding:6px 14px">回到今天</button>
       </div>
-      <div class="row sleep-row">
-        <label><input type="checkbox" id="sleepToggle" checked> 显示睡眠时间</label>
+      <div class="row toggle-row">
+        <span class="tg-label active" id="tgPeriod">占全天</span>
+        <label class="switch">
+          <input type="checkbox" id="pctToggle">
+          <span class="slider"></span>
+        </label>
+        <span class="tg-label" id="tgRecorded">占已记录</span>
       </div>
+      <div class="row toggle-row">
+        <span class="tg-label active" id="tgSleep">显示睡眠时间</span>
+        <label class="switch">
+          <input type="checkbox" id="sleepToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="pct-note" id="pctNote"></div>
       <div class="chart-wrap"><canvas id="pieCanvas"></canvas></div>
       <div id="statsLegend"></div>
     </div>
@@ -587,6 +619,7 @@ let recDate = todayStr();
 let selMain=null, selSub=null, editingBehaviors=false;
 let weekMonday = fmtDate(mondayOf(new Date()));
 let statsDate = todayStr(), statsMode="day", showSleep=true;
+let pctMode="period";   // period=占全天/周期，recorded=占已记录时长
 
 /* ---------- 记录数据读写 ---------- */
 function slotsOfDay(ds){ return (store.days[ds]&&store.days[ds].slots)||{}; }
@@ -1397,7 +1430,17 @@ $("statsSeg").querySelectorAll("button").forEach(btn=>{
     renderStats();
   });
 });
-$("sleepToggle").addEventListener("change",e=>{ showSleep=e.target.checked; renderStats(); });
+$("sleepToggle").addEventListener("change",e=>{
+  showSleep=e.target.checked;
+  $("tgSleep").classList.toggle("active", showSleep);
+  renderStats();
+});
+$("pctToggle").addEventListener("change",e=>{
+  pctMode = e.target.checked ? "recorded" : "period";
+  $("tgPeriod").classList.toggle("active", pctMode==="period");
+  $("tgRecorded").classList.toggle("active", pctMode==="recorded");
+  renderStats();
+});
 $("stPrev").addEventListener("click",()=>{ shiftStats(-1); });
 $("stNext").addEventListener("click",()=>{ shiftStats(1); });
 $("stToday").addEventListener("click",()=>{ statsDate=todayStr(); renderStats(); });
@@ -1436,6 +1479,11 @@ function periodMinutes(){
   /* month：按 statsDate 所在月的实际天数（处理 28/29/30/31） */
   return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()*1440;
 }
+/* 分钟 → “X小时”（整数不带小数，用于分母说明） */
+function fmtHours(min){
+  const v=min/60;
+  return (Number.isInteger(v)?v:v.toFixed(1))+"小时";
+}
 
 function totals(dates){
   const t={};
@@ -1460,7 +1508,13 @@ function renderStats(){
   items.sort((a,b)=>b.value-a.value);
   const total=items.reduce((s,it)=>s+it.value,0);
   const periodMin=periodMinutes();
-  drawDonut(items,total);
+  /* 占比分母：占全天模式=周期总时长；占已记录模式=当前已记录总时长（已排除隐藏的睡眠） */
+  const denom = pctMode==="recorded" ? total : periodMin;
+  drawDonut(items,total,denom);
+  // 分母说明
+  $("pctNote").textContent = pctMode==="recorded"
+    ? "占比基准：已记录 "+fmtHours(total)+(showSleep?"":"（不含睡眠）")
+    : "占比基准：周期共 "+fmtHours(periodMin)+(showSleep?"":"（不含睡眠）");
   // 图例
   const lg=$("statsLegend"); lg.innerHTML="";
   if(!items.length){ lg.innerHTML='<div class="empty-tip">该时间段内暂无记录</div>'; return; }
@@ -1475,13 +1529,13 @@ function renderStats(){
     const bi=document.createElement("i"); bi.style.width=(max?it.value/max*100:0)+"%"; bi.style.background=it.color;
     bar.appendChild(bi);
     const val=document.createElement("span"); val.className="stat-val";
-    val.textContent=(it.value/60).toFixed(1)+"小时 · "+(periodMin?(it.value/periodMin*100).toFixed(1):0)+"%";
+    val.textContent=(it.value/60).toFixed(1)+"小时 · "+(denom?(it.value/denom*100).toFixed(1):0)+"%";
     row.appendChild(nm); row.appendChild(bar); row.appendChild(val);
     lg.appendChild(row);
   });
 }
 
-function drawDonut(items,total){
+function drawDonut(items,total,denom){
   const canvas=$("pieCanvas");
   const dpr=window.devicePixelRatio||1;
   const wrapW=canvas.parentElement?canvas.parentElement.clientWidth:320;
@@ -1501,11 +1555,15 @@ function drawDonut(items,total){
     ctx.fillText("暂无记录",cx,cy);
     return;
   }
-  const MIN_PCT=0.04; // 占比<4%的色段不标注
+  const D=denom||total;   // 占比基准（占全天时大于已记录时长，差额显示为灰色未记录段）
+  /* 灰色底环：代表周期内未记录的时间（占已记录模式下会被色段完全覆盖） */
+  ctx.beginPath(); ctx.arc(cx,cy,(R+r)/2,0,Math.PI*2);
+  ctx.strokeStyle="#EFF1F6"; ctx.lineWidth=R-r; ctx.stroke();
+  const MIN_PCT=0.04; // 占已记录比例<4%的色段不标注
   let ang=-Math.PI/2;
   const labels=[];
   items.forEach(it=>{
-    const a=it.value/total*Math.PI*2;
+    const a=it.value/D*Math.PI*2;
     ctx.beginPath();
     ctx.moveTo(cx+Math.cos(ang)*r, cy+Math.sin(ang)*r);
     ctx.arc(cx,cy,R,ang,ang+a);
@@ -1533,7 +1591,7 @@ function drawDonut(items,total){
     ctx.moveTo(x1,y1); ctx.lineTo(x2,l.y); ctx.lineTo(x3,l.y);
     ctx.strokeStyle="#B9BFD3"; ctx.lineWidth=1; ctx.stroke();
     ctx.fillStyle="#3B4256"; ctx.textAlign=l.side===1?"left":"right";
-    const pct=(l.it.value/total*100).toFixed(1)+"%";
+    const pct=(l.it.value/D*100).toFixed(1)+"%";
     ctx.fillText(l.it.name+" "+pct, x3+l.side*4, l.y);
   });
   ctx.fillStyle="#3B4256"; ctx.textAlign="center"; ctx.textBaseline="middle";
