@@ -1538,6 +1538,8 @@ function periodMinutes(){
   /* month：按 statsDate 所在月的实际天数（处理 28/29/30/31） */
   return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()*1440;
 }
+/* 占比口径文案：随统计模式变化（今天/本周/本月） */
+function periodName(){ return statsMode==="day"?"今天":statsMode==="week"?"本周":"本月"; }
 /* 分钟 → “X小时”（整数不带小数，用于分母说明） */
 function fmtHours(min){
   const v=min/60;
@@ -1570,10 +1572,11 @@ function renderStats(){
   /* 占比分母：占全天模式=周期总时长；占已记录模式=当前已记录总时长（已排除隐藏的睡眠） */
   const denom = pctMode==="recorded" ? total : periodMin;
   drawDonut(items,total,denom);
-  // 分母说明
+  // 分母说明（左标签文案随统计模式变化：占今天/占本周/占本月）
+  $("tgPeriod").textContent = "占"+periodName();
   $("pctNote").textContent = pctMode==="recorded"
     ? "占比基准：已记录 "+fmtHours(total)+(showSleep?"":"（不含睡眠）")
-    : "占比基准：周期共 "+fmtHours(periodMin)+(showSleep?"":"（不含睡眠）");
+    : "占比基准："+periodName()+"共 "+fmtHours(periodMin)+(showSleep?"":"（不含睡眠）");
   // 图例
   const lg=$("statsLegend"); lg.innerHTML="";
   if(!items.length){ lg.innerHTML='<div class="empty-tip">该时间段内暂无记录</div>'; return; }
