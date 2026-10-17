@@ -1376,7 +1376,7 @@ function exportWeekImage(){
     ctx.fillText(WD[dayDate.getDay()], x+DAY_W/2, TITLE_H+27);
     ctx.fillStyle="#EFF1F6"; ctx.fillRect(x+1, gridY, DAY_W-2, SLOTS*SLOT_H);
   }
-  /* 时段色块 + 名称标注（≥30分钟才标注） */
+  /* 时段色块 + 名称标注（20分钟及以上标注，10分钟的太窄不标） */
   ctx.textBaseline="middle";
   for(let d=0;d<7;d++){
     const date=fmtDate(addDays(mon,d));
@@ -1392,8 +1392,9 @@ function exportWeekImage(){
         g.addColorStop(0,c1); g.addColorStop(.5,c1); g.addColorStop(.5,c2); g.addColorStop(1,c2);
         ctx.fillStyle=g; ctx.fillRect(x+1,y,DAY_W-2,hpx);
       }
-      if(rng.end-rng.start>=3 && hpx>=14){
-        ctx.fillStyle="#FFFFFF"; ctx.font="9px 'Microsoft YaHei'";
+      if(rng.end-rng.start>=2 && hpx>=9){
+        ctx.fillStyle="#FFFFFF";
+        ctx.font=(hpx<12?"8px":"9px")+" 'Microsoft YaHei'";   // 20分钟块（9.6px高）用小一号字
         ctx.fillText(rng.ids.map(nameOf).join("＋"), x+DAY_W/2, y+hpx/2);
       }
     });
@@ -1456,9 +1457,9 @@ function renderWeek(){
       });
       body.appendChild(el);
     }
-    // 色块内直接标注行为名称（时段过短则不标，保证美观）
+    // 色块内直接标注行为名称（10分钟的不标，20分钟及以上都标）
     rangesOfDay(date).forEach(rng=>{
-      if(rng.end-rng.start<3) return; // <30分钟不标
+      if(rng.end-rng.start<2) return; // <20分钟不标
       const lab=document.createElement("span");
       lab.className="wlabel";
       lab.style.top="calc(var(--slot) * "+rng.start+")";
