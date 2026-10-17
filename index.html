@@ -1358,10 +1358,10 @@ function exportWeekImage(){
   ctx.font="12px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
   ctx.fillText((mon.getMonth()+1)+"月"+mon.getDate()+"日 – "+(sun.getMonth()+1)+"月"+sun.getDate()+"日", W/2, P+30);
 
-  /* 小时刻度 */
-  ctx.textAlign="right"; ctx.font="9px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8";
+  /* 小时刻度：文字中心对齐整点线，与色块坐标同一基准（y=gridY+slot*SLOT_H） */
+  ctx.textAlign="right"; ctx.font="9px 'Microsoft YaHei'"; ctx.fillStyle="#8A91A8"; ctx.textBaseline="middle";
   for(let h=0;h<24;h+=2){
-    ctx.fillText(pad(h)+":00", P+HOUR_W-4, gridY+h*6*SLOT_H+SLOT_H*3);
+    ctx.fillText(pad(h)+":00", P+HOUR_W-4, gridY+h*6*SLOT_H);
   }
   /* 空白底格 + 日期表头 */
   const today=todayStr();
